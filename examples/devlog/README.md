@@ -8,7 +8,7 @@ Per-session silent toggle. Asks Claude to keep a running journal under `.claude/
 Install:
 
 ```sh
-cp -r examples/devlog ~/.claudetoggle/toggles/
+cp -r examples/devlog ~/.claude/toggles/
 ./install.sh
 ```
 

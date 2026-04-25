@@ -25,7 +25,7 @@ export LC_ALL=C
 
 # Resolve framework lib regardless of whether install.sh symlinks lib/ as a
 # whole directory or pieces individually. Override with CLAUDETOGGLE_LIB.
-CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../lib}
+CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../.lib}
 
 # shellcheck source=lib/scope.sh
 . "$CLAUDETOGGLE_LIB/scope.sh"
@@ -86,8 +86,8 @@ handle_user_prompt_match() {
 			;;
 		1) # currently OFF → flip ON, optionally seed counter
 			toggle_on "$TOGGLE_SCOPE" "$TOGGLE_NAME" "$cwd" "$session"
-			if [ "${TOGGLE_REANNOUNCE_EVERY:-0}" -gt 0 ] && [ -n "$session" ]; then
-				toggle_seed_counter "$TOGGLE_NAME" "$session" \
+			if [ "${TOGGLE_REANNOUNCE_EVERY:-0}" -gt 0 ]; then
+				toggle_seed_counter "$TOGGLE_NAME" \
 					$((TOGGLE_REANNOUNCE_EVERY - 1))
 			fi
 			msg=${TOGGLE_ON_MSG:-"$TOGGLE_NAME ON"}
@@ -120,11 +120,10 @@ handle_reannounce() {
 		toggle_active "$TOGGLE_SCOPE" "$TOGGLE_NAME" "$cwd" "$session" || active_rc=$?
 		[ "$active_rc" -eq 0 ] || continue
 		[ "${TOGGLE_REANNOUNCE_EVERY:-0}" -gt 0 ] || continue
-		[ -n "$session" ] || continue
-		count=$(toggle_tick "$TOGGLE_NAME" "$session") || continue
+		count=$(toggle_tick "$TOGGLE_NAME") || continue
 		if [ "$count" -ge "${TOGGLE_REANNOUNCE_EVERY:-0}" ]; then
 			msgs+=("$TOGGLE_ON_MSG")
-			toggle_seed_counter "$TOGGLE_NAME" "$session" 0
+			toggle_seed_counter "$TOGGLE_NAME" 0
 		fi
 	done < <(toggle_files)
 	if [ "${#msgs[@]}" -gt 0 ]; then

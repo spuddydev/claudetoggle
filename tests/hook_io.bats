@@ -35,8 +35,8 @@ teardown() {
 @test "hook_log writes a line when CLAUDETOGGLE_DEBUG is set" {
 	export CLAUDETOGGLE_DEBUG=1
 	hook_log "marker line"
-	[ -f "$CLAUDETOGGLE_HOME/hooks-debug.log" ]
-	grep -q 'marker line' "$CLAUDETOGGLE_HOME/hooks-debug.log"
+	[ -f "$CLAUDETOGGLE_HOME/.debug.log" ]
+	grep -q 'marker line' "$CLAUDETOGGLE_HOME/.debug.log"
 }
 
 @test "deny_pretooluse emits PreToolUse deny JSON and exits 0" {

@@ -6,17 +6,17 @@ setup() {
 	export TMP=$(mktemp -d)
 	export HOME=$TMP
 	export CLAUDE_HOME=$TMP/.claude
-	export CLAUDETOGGLE_HOME=$TMP/.claudetoggle
+	export CLAUDETOGGLE_HOME=$CLAUDE_HOME/toggles
 	export REPO=$(repo_root)
-	mkdir -p "$CLAUDETOGGLE_HOME/toggles/foo"
-	cat >"$CLAUDETOGGLE_HOME/toggles/foo/toggle.sh" <<'EOF'
+	mkdir -p "$CLAUDETOGGLE_HOME/foo"
+	cat >"$CLAUDETOGGLE_HOME/foo/toggle.sh" <<'EOF'
 TOGGLE_API=1
 TOGGLE_NAME=foo
 TOGGLE_SCOPE=session
 TOGGLE_ON_MSG="foo on"
 TOGGLE_OFF_MSG="foo off"
 EOF
-	cat >"$CLAUDETOGGLE_HOME/toggles/foo/foo.md" <<'EOF'
+	cat >"$CLAUDETOGGLE_HOME/foo/foo.md" <<'EOF'
 ---
 description: Toggle foo
 ---
@@ -44,11 +44,11 @@ teardown() {
 	[ "$got" = "" ]
 }
 
-@test "preserves $CLAUDETOGGLE_HOME/state by default" {
-	mkdir -p "$CLAUDETOGGLE_HOME/state/foo/sessions"
-	: >"$CLAUDETOGGLE_HOME/state/foo/sessions/sentinel"
+@test "preserves $CLAUDETOGGLE_HOME/.state by default" {
+	mkdir -p "$CLAUDETOGGLE_HOME/.state/foo/sessions"
+	: >"$CLAUDETOGGLE_HOME/.state/foo/sessions/sentinel"
 	bash "$REPO/uninstall.sh" >/dev/null
-	[ -f "$CLAUDETOGGLE_HOME/state/foo/sessions/sentinel" ]
+	[ -f "$CLAUDETOGGLE_HOME/.state/foo/sessions/sentinel" ]
 }
 
 @test "--purge removes the home directory" {

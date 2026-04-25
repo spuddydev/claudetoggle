@@ -2,12 +2,11 @@
 
 load test_helper
 
-# Helpers — write a registry toggle file under $TOGGLE_REGISTRY/<name>/toggle.sh
-# with the given snippet appended to a sane default body.
+# Helpers — write a registry toggle file under $CLAUDETOGGLE_HOME/<name>/toggle.sh.
 write_toggle() {
 	local name=$1 scope=$2 extra=${3:-}
-	mkdir -p "$TOGGLE_REGISTRY/$name"
-	cat >"$TOGGLE_REGISTRY/$name/toggle.sh" <<EOF
+	mkdir -p "$CLAUDETOGGLE_HOME/$name"
+	cat >"$CLAUDETOGGLE_HOME/$name/toggle.sh" <<EOF
 TOGGLE_API=1
 TOGGLE_NAME=$name
 TOGGLE_SCOPE=$scope
@@ -22,14 +21,13 @@ EOF
 run_dispatch() {
 	local event=$1 input=$2
 	run bash -c '
-        export CLAUDETOGGLE_HOME="$1" TOGGLE_REGISTRY="$2"
-        printf %s "$3" | bash "$4/bin/dispatch.sh" "$5"
-    ' _ "$CLAUDETOGGLE_HOME" "$TOGGLE_REGISTRY" "$input" "$(repo_root)" "$event"
+        export CLAUDETOGGLE_HOME="$1" CLAUDETOGGLE_LIB="$3/lib"
+        printf %s "$2" | bash "$3/bin/dispatch.sh" "$4"
+    ' _ "$CLAUDETOGGLE_HOME" "$input" "$(repo_root)" "$event"
 }
 
 setup() {
 	setup_isolated_home
-	export TOGGLE_REGISTRY="$CLAUDETOGGLE_HOME/toggles"
 	export CWD="$BATS_TEST_TMPDIR/cwd"
 	mkdir -p "$CWD"
 	export SID=s1
@@ -56,7 +54,7 @@ session_input() {
 	[ "$(jq -r .decision <<<"$output")" = "block" ]
 	[ "$(jq -r .reason <<<"$output")" = "coauth is ON" ]
 	key=$(. "$(repo_root)/lib/scope.sh" && project_key "$CWD")
-	[ -f "$CLAUDETOGGLE_HOME/coauth/projects/$key" ]
+	[ -f "$CLAUDETOGGLE_HOME/.state/coauth/projects/$key" ]
 }
 
 @test "case 2: second /coauth toggles OFF, emits OFF_MSG, sentinel removed" {
@@ -66,7 +64,7 @@ session_input() {
 	[ "$status" -eq 0 ]
 	[ "$(jq -r .reason <<<"$output")" = "coauth is OFF" ]
 	key=$(. "$(repo_root)/lib/scope.sh" && project_key "$CWD")
-	[ ! -f "$CLAUDETOGGLE_HOME/coauth/projects/$key" ]
+	[ ! -f "$CLAUDETOGGLE_HOME/.state/coauth/projects/$key" ]
 }
 
 @test "case 3: plain prompt with active toggle ticks, reannounces after threshold" {
@@ -144,17 +142,16 @@ session_input() {
 	run_dispatch UserPromptSubmit "$(prompt_input '/silent')"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
-	[ -f "$CLAUDETOGGLE_HOME/silent/sessions/$SID" ]
+	[ -f "$CLAUDETOGGLE_HOME/.state/silent/sessions/$SID" ]
 }
 
 @test "case 12: flip-to-ON does NOT also tick on the same prompt" {
 	# REANNOUNCE_EVERY=1 so any tick at all on the flip would inject.
 	write_toggle foo session "TOGGLE_REANNOUNCE_EVERY=1"
 	run_dispatch UserPromptSubmit "$(prompt_input '/foo')"
-	# Output is the flip block; counter must NOT have ticked.
 	[ "$(jq -r .decision <<<"$output")" = "block" ]
 	# Counter was seeded to 0 (REANNOUNCE_EVERY-1) and never ticked this turn.
-	read -r count <"$CLAUDETOGGLE_HOME/foo/counters/$SID"
+	read -r count <"$CLAUDETOGGLE_HOME/.state/foo/counter"
 	[ "$count" = "0" ]
 }
 
@@ -167,8 +164,8 @@ session_input() {
 }
 
 @test "case 14: TOGGLE_API=2 rejected; other toggles continue" {
-	mkdir -p "$TOGGLE_REGISTRY/old"
-	cat >"$TOGGLE_REGISTRY/old/toggle.sh" <<'EOF'
+	mkdir -p "$CLAUDETOGGLE_HOME/old"
+	cat >"$CLAUDETOGGLE_HOME/old/toggle.sh" <<'EOF'
 TOGGLE_API=2
 TOGGLE_NAME=old
 TOGGLE_SCOPE=session
@@ -181,8 +178,8 @@ EOF
 }
 
 @test "case 15: TOGGLE_API unset rejected; other toggles continue" {
-	mkdir -p "$TOGGLE_REGISTRY/legacy"
-	cat >"$TOGGLE_REGISTRY/legacy/toggle.sh" <<'EOF'
+	mkdir -p "$CLAUDETOGGLE_HOME/legacy"
+	cat >"$CLAUDETOGGLE_HOME/legacy/toggle.sh" <<'EOF'
 TOGGLE_NAME=legacy
 TOGGLE_SCOPE=session
 TOGGLE_ON_MSG="legacy is ON"
@@ -194,7 +191,7 @@ EOF
 }
 
 @test "case 16: empty registry → exit 0, no output for both events" {
-	mkdir -p "$TOGGLE_REGISTRY"
+	mkdir -p "$CLAUDETOGGLE_HOME"
 	run_dispatch UserPromptSubmit "$(prompt_input 'hello')"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
