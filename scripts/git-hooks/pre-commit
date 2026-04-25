@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Runs on every commit: format check and lint on staged shell files.
+set -euo pipefail
+
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(sh|bats)$' || true)
+if [ "${#staged[@]}" -eq 0 ]; then
+	exit 0
+fi
+
+# Only check files that still exist on disk (renames, deletions).
+mapfile -t targets < <(printf '%s\n' "${staged[@]}" | xargs -I{} bash -c '[ -f "{}" ] && echo "{}"')
+if [ "${#targets[@]}" -eq 0 ]; then
+	exit 0
+fi
+
+echo "[pre-commit] shfmt"
+shfmt -d "${targets[@]}"
+
+echo "[pre-commit] shellcheck"
+# bats files are not pure bash; skip them in shellcheck.
+mapfile -t sh_targets < <(printf '%s\n' "${targets[@]}" | grep -E '\.sh$' || true)
+if [ "${#sh_targets[@]}" -gt 0 ]; then
+	shellcheck "${sh_targets[@]}"
+fi

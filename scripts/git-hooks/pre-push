@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Runs on every push: full bats suite. Lint and format are covered pre-commit.
+set -euo pipefail
+
+if ! command -v bats >/dev/null; then
+	echo "[pre-push] bats not installed, skipping"
+	exit 0
+fi
+
+echo "[pre-push] bats tests"
+bats tests
