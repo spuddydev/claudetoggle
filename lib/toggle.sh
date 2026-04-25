@@ -26,28 +26,32 @@
 # shellcheck source=lib/scope.sh
 . "${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}/scope.sh"
 
-TOGGLE_REGISTRY=${TOGGLE_REGISTRY:-$HOME/.claude/toggles}
+TOGGLE_REGISTRY=${TOGGLE_REGISTRY:-$HOME/.claudetoggle/toggles}
 
 # Reannounce counters live under <feature>/counters/<sid>, deliberately
 # separate from <feature>/sessions/<sid> so a session-scoped sentinel
 # (a file) and the counter (also a file) cannot collide on the same path.
 
 # toggle_files → print every registered toggle file path on its own line.
-# Silent when the registry is missing or empty so callers can pipe safely.
+# Layout: $TOGGLE_REGISTRY/<name>/toggle.sh (directory-per-toggle).
+# Output is sorted under LC_ALL=C so registry order is reproducible across
+# locales. Silent when the registry is missing or empty so callers can pipe.
 toggle_files() {
 	[ -d "$TOGGLE_REGISTRY" ] || return 0
-	local f
-	for f in "$TOGGLE_REGISTRY"/*.sh; do
-		[ -r "$f" ] && printf '%s\n' "$f"
+	local f found=()
+	for f in "$TOGGLE_REGISTRY"/*/toggle.sh; do
+		[ -r "$f" ] && found+=("$f")
 	done
+	[ "${#found[@]}" -eq 0 ] && return 0
+	printf '%s\n' "${found[@]}" | LC_ALL=C sort
 }
 
 # toggle_reset → unset every TOGGLE_* var so the next source starts clean.
 # Call between toggles when iterating the registry in one shell.
 toggle_reset() {
-	unset TOGGLE_NAME TOGGLE_SCOPE TOGGLE_ON_MSG TOGGLE_OFF_MSG TOGGLE_MARKER \
-		TOGGLE_REANNOUNCE_EVERY TOGGLE_ANNOUNCE_ON_SESSION_START \
-		TOGGLE_ANNOUNCE_ON_TOGGLE TOGGLE_STATUSLINE
+	unset TOGGLE_NAME TOGGLE_SCOPE TOGGLE_API TOGGLE_ON_MSG TOGGLE_OFF_MSG \
+		TOGGLE_MARKER TOGGLE_REANNOUNCE_EVERY TOGGLE_ANNOUNCE_ON_SESSION_START \
+		TOGGLE_ANNOUNCE_ON_TOGGLE TOGGLE_STATUSLINE TOGGLE_EXTRA_HOOKS
 }
 
 # toggle_sentinel_for SCOPE NAME CWD SESSION → print the sentinel path or
@@ -61,7 +65,7 @@ toggle_sentinel_for() {
 # not race the counter, and global toggles still want per-session cadence.
 toggle_counter_for() {
 	[ -n "$2" ] || return 1
-	printf '%s\n' "${CLAUDETOGGLE_HOME:-$HOME/.claude}/$1/counters/$2"
+	printf '%s\n' "${CLAUDETOGGLE_HOME:-$HOME/.claudetoggle}/$1/counters/$2"
 }
 
 # toggle_active SCOPE NAME CWD SESSION → 0 if ON, 1 if OFF, 2 if the

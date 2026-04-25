@@ -9,7 +9,7 @@
 # Helpers print paths. They never create directories — callers do that
 # immediately before writing.
 
-CLAUDETOGGLE_HOME="${CLAUDETOGGLE_HOME:-$HOME/.claude}"
+CLAUDETOGGLE_HOME="${CLAUDETOGGLE_HOME:-$HOME/.claudetoggle}"
 
 # project_key CWD → 16-char sha256 prefix of the git root (or CWD if not in
 # a repo). Subdirectories of a repo therefore share project state.
