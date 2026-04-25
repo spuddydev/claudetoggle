@@ -18,26 +18,30 @@ teardown() {
 	[ -z "$output" ]
 }
 
-@test "toggle_files lists registry .sh files" {
-	mkdir -p "$TOGGLE_REGISTRY"
-	: >"$TOGGLE_REGISTRY/foo.sh"
-	: >"$TOGGLE_REGISTRY/bar.sh"
-	: >"$TOGGLE_REGISTRY/ignore.txt"
+@test "toggle_files lists <name>/toggle.sh entries, sorted, skipping strays" {
+	mkdir -p "$TOGGLE_REGISTRY/foo" "$TOGGLE_REGISTRY/bar" \
+		"$TOGGLE_REGISTRY/ignored" "$TOGGLE_REGISTRY/empty"
+	: >"$TOGGLE_REGISTRY/foo/toggle.sh"
+	: >"$TOGGLE_REGISTRY/bar/toggle.sh"
+	# Stray: no toggle.sh inside the dir → skipped
+	: >"$TOGGLE_REGISTRY/ignored/notes.txt"
+	# Stray: top-level .sh file → skipped (not under a sub-directory)
+	: >"$TOGGLE_REGISTRY/loose.sh"
 	run toggle_files
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"/foo.sh"* ]]
-	[[ "$output" == *"/bar.sh"* ]]
-	[[ "$output" != *"ignore.txt"* ]]
+	expected="$TOGGLE_REGISTRY/bar/toggle.sh"$'\n'"$TOGGLE_REGISTRY/foo/toggle.sh"
+	[ "$output" = "$expected" ]
 }
 
 @test "toggle_reset clears all TOGGLE_* vars" {
-	TOGGLE_NAME=x TOGGLE_SCOPE=session TOGGLE_ON_MSG=on TOGGLE_OFF_MSG=off
+	TOGGLE_NAME=x TOGGLE_SCOPE=session TOGGLE_API=1 TOGGLE_ON_MSG=on TOGGLE_OFF_MSG=off
 	TOGGLE_MARKER=m TOGGLE_REANNOUNCE_EVERY=5
 	TOGGLE_ANNOUNCE_ON_SESSION_START=1 TOGGLE_ANNOUNCE_ON_TOGGLE=0
-	TOGGLE_STATUSLINE=1
+	TOGGLE_STATUSLINE=1 TOGGLE_EXTRA_HOOKS=("a")
 	toggle_reset
 	[ -z "${TOGGLE_NAME:-}" ]
 	[ -z "${TOGGLE_SCOPE:-}" ]
+	[ -z "${TOGGLE_API:-}" ]
 	[ -z "${TOGGLE_ON_MSG:-}" ]
 	[ -z "${TOGGLE_OFF_MSG:-}" ]
 	[ -z "${TOGGLE_MARKER:-}" ]
@@ -45,6 +49,7 @@ teardown() {
 	[ -z "${TOGGLE_ANNOUNCE_ON_SESSION_START:-}" ]
 	[ -z "${TOGGLE_ANNOUNCE_ON_TOGGLE:-}" ]
 	[ -z "${TOGGLE_STATUSLINE:-}" ]
+	[ -z "${TOGGLE_EXTRA_HOOKS+set}" ]
 }
 
 @test "toggle_active returns 1 when off, 0 when on, 2 when scope unavailable" {

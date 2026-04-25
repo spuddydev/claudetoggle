@@ -38,3 +38,26 @@ teardown() {
 	[ -f "$CLAUDETOGGLE_HOME/hooks-debug.log" ]
 	grep -q 'marker line' "$CLAUDETOGGLE_HOME/hooks-debug.log"
 }
+
+@test "deny_pretooluse emits PreToolUse deny JSON and exits 0" {
+	run bash -c '. "$1/lib/hook_io.sh" && deny_pretooluse "no go"' _ "$(repo_root)"
+	[ "$status" -eq 0 ]
+	got=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.hookEventName + "|" + .hookSpecificOutput.permissionDecision + "|" + .hookSpecificOutput.permissionDecisionReason')
+	[ "$got" = "PreToolUse|deny|no go" ]
+}
+
+@test "deny_with_errors is a no-op when no errors are passed" {
+	run bash -c '. "$1/lib/hook_io.sh" && deny_with_errors hdr cmd "git x"' _ "$(repo_root)"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "deny_with_errors emits a multi-line deny reason" {
+	run bash -c '. "$1/lib/hook_io.sh" && deny_with_errors hdr cmd "git commit -m x" "header too long" "missing trailer"' _ "$(repo_root)"
+	[ "$status" -eq 0 ]
+	reason=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+	[[ "$reason" == "hdr rejected:"* ]]
+	[[ "$reason" == *"header too long"* ]]
+	[[ "$reason" == *"missing trailer"* ]]
+	[[ "$reason" == *"cmd: git commit -m x"* ]]
+}
