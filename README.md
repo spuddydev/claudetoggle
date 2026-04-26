@@ -75,15 +75,20 @@ Now in Claude Code, type `/safetynet`. The toggle flips on, the model sees the n
 
 ```
 claudetoggle add <name|path>      register a shipped example or a local directory
-claudetoggle remove <name>        unregister and delete a toggle (--keep-state to preserve)
+                                  (--dry-run to preview without writing)
+claudetoggle remove <name>        unregister and delete a toggle (--keep-state to preserve,
+                                  --dry-run to preview)
 claudetoggle list                 show registered toggles and current state
 claudetoggle on <name>            flip a toggle ON in the current scope
 claudetoggle off <name>           flip a toggle OFF in the current scope
 claudetoggle update               re-run setup.sh against the latest release
 claudetoggle uninstall            unwire claudetoggle (--purge to also delete data and CLI)
 claudetoggle doctor               diagnostic dump
+claudetoggle version              print the installed version
 claudetoggle help                 full reference
 ```
+
+Tip: `claudetoggle on <name>` and `claudetoggle off <name>` work outside Claude Code too — handy for scripting or flipping a toggle from your shell without touching the chat.
 
 ## How a toggle works
 
