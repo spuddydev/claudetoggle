@@ -140,6 +140,7 @@ mkdir -p \
 	"$CLAUDETOGGLE_HOME/bin" \
 	"$CLAUDETOGGLE_HOME/toggles" \
 	"$CLAUDETOGGLE_HOME/examples" \
+	"$CLAUDETOGGLE_HOME/docs" \
 	"$CLAUDETOGGLE_HOME/state" \
 	"$CLAUDE_HOME/commands" \
 	"$PREFIX/bin"
@@ -149,6 +150,9 @@ cp -r "$src/bin"/. "$CLAUDETOGGLE_HOME/bin/"
 cp -r "$src/scripts/settings_merge.sh" "$CLAUDETOGGLE_HOME/bin/settings_merge.sh"
 if [ -d "$src/examples" ]; then
 	cp -r "$src/examples"/. "$CLAUDETOGGLE_HOME/examples/"
+fi
+if [ -d "$src/docs" ]; then
+	cp -r "$src/docs"/. "$CLAUDETOGGLE_HOME/docs/"
 fi
 chmod +x "$CLAUDETOGGLE_HOME/bin"/*.sh "$CLAUDETOGGLE_HOME/bin/claudetoggle" 2>/dev/null || true
 

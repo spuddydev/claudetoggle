@@ -5,7 +5,7 @@
 
 Add `/yourtoggle` slash commands to Claude Code with one file. Each toggle flips a rule on or off — for the project, the session, or globally — and tells the model the new state.
 
-> Want to hack on the framework itself? See [CONTRIBUTING.md](CONTRIBUTING.md). Release log: [CHANGELOG.md](CHANGELOG.md).
+> Writing your own toggle? See [docs/AUTHORING.md](docs/AUTHORING.md). Hacking on the framework? See [CONTRIBUTING.md](CONTRIBUTING.md). Release log: [CHANGELOG.md](CHANGELOG.md).
 
 ## Why you'd use this
 
@@ -163,7 +163,7 @@ Two `..` because peer scripts live at `<data>/toggles/<name>/<peer>.sh`, two lev
 
 After editing a registered toggle's metadata, run `claudetoggle remove <name>` then `claudetoggle add <path>` to re-register with the changes.
 
-See [`examples/coauth/`](examples/coauth/) for a complete worked example.
+See [`examples/coauth/`](examples/coauth/) for a complete worked example. The full schema reference, scope semantics, idempotency rules and peer-script patterns live in [docs/AUTHORING.md](docs/AUTHORING.md).
 
 ## Statusline integration
 
