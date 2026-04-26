@@ -21,6 +21,11 @@ PREFIX=${PREFIX:-$HOME/.local}
 VERSION=${VERSION:-}
 LOCAL=0
 LOCAL_DIR=
+# Checksum verification when fetching a tagged release. Set
+# CLAUDETOGGLE_SKIP_VERIFY=1 to opt out — useful when fetching `main`,
+# bootstrapping a tag that pre-dates the release workflow, or running in
+# an air-gapped environment.
+SKIP_VERIFY=${CLAUDETOGGLE_SKIP_VERIFY:-0}
 
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -31,16 +36,20 @@ while [ $# -gt 0 ]; do
 		;;
 	--version=*) VERSION=${1#--version=} ;;
 	--prefix=*) PREFIX=${1#--prefix=} ;;
+	--skip-verify) SKIP_VERIFY=1 ;;
 	-h | --help)
 		cat <<EOF
 claudetoggle setup
 
-Usage: setup.sh [--local[=DIR]] [--version=vX.Y.Z] [--prefix=DIR]
+Usage: setup.sh [--local[=DIR]] [--version=vX.Y.Z] [--prefix=DIR] [--skip-verify]
 
-Env: CLAUDE_HOME, CLAUDETOGGLE_HOME, XDG_DATA_HOME, PREFIX, VERSION
+Env: CLAUDE_HOME, CLAUDETOGGLE_HOME, XDG_DATA_HOME, PREFIX, VERSION,
+     CLAUDETOGGLE_SKIP_VERIFY
 
 Without flags, fetches the latest release tarball from $REPO and installs.
 With --local, uses the directory the script lives in (or =DIR) as the source.
+SHA256 verification runs by default for tagged releases; pass --skip-verify or
+set CLAUDETOGGLE_SKIP_VERIFY=1 to bypass.
 EOF
 		exit 0
 		;;
@@ -127,9 +136,45 @@ else
 	else
 		wget -qO "$tarball" "$url"
 	fi
+
+	# Verify the tarball against the SHA256SUMS attached to the GitHub release.
+	# Only meaningful for tagged releases — `main` ships unsigned by definition.
+	if [ "$VERSION" != main ] && [ "$SKIP_VERIFY" != 1 ]; then
+		sums_url=https://github.com/$REPO/releases/download/$VERSION/SHA256SUMS
+		sums_file=$tmp/SHA256SUMS
+		say "Verifying $VERSION against $sums_url"
+		fetched_sums=0
+		if [ "$need_curl_or_wget" = curl ]; then
+			if curl -sSfL "$sums_url" -o "$sums_file" 2>/dev/null; then fetched_sums=1; fi
+		else
+			if wget -qO "$sums_file" "$sums_url" 2>/dev/null; then fetched_sums=1; fi
+		fi
+		if [ "$fetched_sums" -eq 0 ]; then
+			cat <<MSG >&2
+setup: no SHA256SUMS published for $VERSION.
+
+This release pre-dates the checksum workflow, or the upload failed. Re-run
+with --skip-verify (or set CLAUDETOGGLE_SKIP_VERIFY=1) to install anyway.
+MSG
+			exit 1
+		fi
+		need sha256sum
+		# The release workflow records the checksum against the basename
+		# claudetoggle-<tag>.tar.gz, so rewrite the on-disk filename to match
+		# before running sha256sum -c. Anchored to the second column of the
+		# SHA256SUMS file to avoid matching unrelated entries.
+		expected_name=claudetoggle-$VERSION.tar.gz
+		cp "$tarball" "$tmp/$expected_name"
+		(cd "$tmp" && sha256sum -c --strict --ignore-missing SHA256SUMS) >/dev/null || {
+			printf 'setup: SHA256 verification FAILED for %s. Refusing to install.\n' "$VERSION" >&2
+			exit 1
+		}
+		say 'Checksum OK.'
+	fi
+
 	tar -xzf "$tarball" -C "$tmp"
 	# Tarballs unpack to a single top-level directory.
-	src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+	src=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -name 'claudetoggle-*' | head -n 1)
 	[ -d "$src" ] || die "extraction produced no directory."
 	[ -d "$src/lib" ] || die "$src is missing lib/. Wrong tarball?"
 fi

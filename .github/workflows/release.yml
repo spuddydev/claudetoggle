@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-checksums:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: echo "name=${GITHUB_REF_NAME}" >>"$GITHUB_OUTPUT"
+
+      - name: Fetch the release tarball GitHub generated for this tag
+        run: |
+          set -eu
+          tag='${{ steps.tag.outputs.name }}'
+          # The tag has just been pushed. Wait for the release tarball to exist.
+          url="https://github.com/${{ github.repository }}/archive/refs/tags/${tag}.tar.gz"
+          for i in $(seq 1 30); do
+            if curl -sSfL -I "$url" >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -sSfL "$url" -o "claudetoggle-${tag}.tar.gz"
+
+      - name: Generate SHA256SUMS
+        run: |
+          set -eu
+          tag='${{ steps.tag.outputs.name }}'
+          sha256sum "claudetoggle-${tag}.tar.gz" >SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attach SHA256SUMS to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag='${{ steps.tag.outputs.name }}'
+          # Idempotent: create the release if missing, then upload.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --generate-notes
+          fi
+          gh release upload "$tag" SHA256SUMS --clobber

@@ -292,3 +292,32 @@ EOF
 	"$PREFIX/bin/claudetoggle" uninstall >/dev/null
 	[ -L "$CLAUDE_HOME/skills/create-claudetoggle" ]
 }
+
+@test "claudetoggle add fails on missing TOGGLE_API" {
+	run_setup >/dev/null
+	src=$TMP/fixtures/no_api
+	mkdir -p "$src"
+	cat >"$src/toggle.sh" <<'EOF'
+TOGGLE_NAME=no_api
+TOGGLE_SCOPE=session
+TOGGLE_ON_MSG="x"
+EOF
+	run claudetoggle add "$src"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"TOGGLE_API"* ]]
+}
+
+@test "claudetoggle add rejects an unknown TOGGLE_API value" {
+	run_setup >/dev/null
+	src=$TMP/fixtures/api2
+	mkdir -p "$src"
+	cat >"$src/toggle.sh" <<'EOF'
+TOGGLE_API=2
+TOGGLE_NAME=api2
+TOGGLE_SCOPE=session
+TOGGLE_ON_MSG="x"
+EOF
+	run claudetoggle add "$src"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"TOGGLE_API"* ]]
+}
