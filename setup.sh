@@ -143,6 +143,7 @@ mkdir -p \
 	"$CLAUDETOGGLE_HOME/docs" \
 	"$CLAUDETOGGLE_HOME/state" \
 	"$CLAUDE_HOME/commands" \
+	"$CLAUDE_HOME/skills" \
 	"$PREFIX/bin"
 
 cp -r "$src/lib"/. "$CLAUDETOGGLE_HOME/lib/"
@@ -155,6 +156,19 @@ if [ -d "$src/docs" ]; then
 	cp -r "$src/docs"/. "$CLAUDETOGGLE_HOME/docs/"
 fi
 chmod +x "$CLAUDETOGGLE_HOME/bin"/*.sh "$CLAUDETOGGLE_HOME/bin/claudetoggle" 2>/dev/null || true
+
+# ──── Install the create-claudetoggle skill (idempotent) ─────────────
+# The skill teaches the model how to scaffold a new toggle. It is a plain
+# markdown file; Claude Code picks it up at session start. We symlink so
+# updates land automatically next time setup.sh runs.
+if [ -d "$src/skills/create-claudetoggle" ]; then
+	mkdir -p "$CLAUDETOGGLE_HOME/skills"
+	cp -r "$src/skills/create-claudetoggle" "$CLAUDETOGGLE_HOME/skills/"
+	skill_dst=$CLAUDE_HOME/skills/create-claudetoggle
+	if [ -L "$skill_dst" ] || [ ! -e "$skill_dst" ]; then
+		ln -snf "$CLAUDETOGGLE_HOME/skills/create-claudetoggle" "$skill_dst"
+	fi
+fi
 
 # Install the CLI on $PATH. Real copy, not a symlink.
 cp "$CLAUDETOGGLE_HOME/bin/claudetoggle" "$PREFIX/bin/claudetoggle"

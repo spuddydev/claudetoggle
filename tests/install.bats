@@ -265,3 +265,30 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"WARN: stale slash-command symlink"* ]]
 }
+
+@test "setup.sh installs the create-claudetoggle skill and AUTHORING.md" {
+	run_setup >/dev/null
+	[ -L "$CLAUDE_HOME/skills/create-claudetoggle" ]
+	target=$(readlink "$CLAUDE_HOME/skills/create-claudetoggle")
+	[ "$target" = "$CLAUDETOGGLE_HOME/skills/create-claudetoggle" ]
+	[ -f "$CLAUDETOGGLE_HOME/skills/create-claudetoggle/SKILL.md" ]
+	[ -f "$CLAUDETOGGLE_HOME/docs/AUTHORING.md" ]
+}
+
+@test "uninstall removes the skill symlink when it points into our data home" {
+	run_setup >/dev/null
+	[ -L "$CLAUDE_HOME/skills/create-claudetoggle" ]
+	"$PREFIX/bin/claudetoggle" uninstall >/dev/null
+	[ ! -e "$CLAUDE_HOME/skills/create-claudetoggle" ]
+}
+
+@test "uninstall preserves an unrelated skill symlink at the same path" {
+	run_setup >/dev/null
+	# Replace our skill symlink with one that points elsewhere — uninstall
+	# must not touch user-owned skill links.
+	rm -f "$CLAUDE_HOME/skills/create-claudetoggle"
+	mkdir -p "$TMP/elsewhere"
+	ln -s "$TMP/elsewhere" "$CLAUDE_HOME/skills/create-claudetoggle"
+	"$PREFIX/bin/claudetoggle" uninstall >/dev/null
+	[ -L "$CLAUDE_HOME/skills/create-claudetoggle" ]
+}

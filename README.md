@@ -165,6 +165,10 @@ After editing a registered toggle's metadata, run `claudetoggle remove <name>` t
 
 See [`examples/coauth/`](examples/coauth/) for a complete worked example. The full schema reference, scope semantics, idempotency rules and peer-script patterns live in [docs/AUTHORING.md](docs/AUTHORING.md).
 
+### Scaffolding skill
+
+If you want Claude to draft a new toggle for you, ask it: *"create a toggle that ..."*. The installer ships a `create-claudetoggle` skill into `~/.claude/skills/` that walks the model through the schema, generates the files into a directory of your choice, and prints the exact `claudetoggle add` command for you to run. It will not register the toggle for you — review it first.
+
 ## Statusline integration
 
 Add this to the script your statusline already runs (the one referenced by `statusLine.command` in `settings.json`):
