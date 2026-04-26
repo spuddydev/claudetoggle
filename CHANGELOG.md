@@ -6,6 +6,29 @@ All notable changes are recorded here. Format follows [Keep a Changelog](https:/
 
 (Reserved.)
 
+## [0.2.0] — 2026-04-26
+
+### Added
+
+- Verified releases. The release workflow uploads `SHA256SUMS` as an asset on every tag push; `setup.sh` fetches it and refuses to unpack the tarball when verification fails. Pass `--skip-verify` or set `CLAUDETOGGLE_SKIP_VERIFY=1` to bypass for older tags or air-gapped installs.
+- `claudetoggle version` (and `--version`/`-v`) prints the recorded release tag.
+- `claudetoggle add --dry-run` and `claudetoggle remove --dry-run` print the exact disk and `settings.json` changes without writing.
+- `claudetoggle update` forwards arbitrary flags to `setup.sh` so users can `--skip-verify` or pin `--version` at upgrade time.
+- Authoring guide at `docs/AUTHORING.md` with scope semantics, idempotency rules, peer-script patterns and the gotchas that bite first-time toggle authors. Shipped into `$CLAUDETOGGLE_HOME/docs/` so installed users have a local copy.
+- `create-claudetoggle` skill at `~/.claude/skills/create-claudetoggle/` so Claude can scaffold a new toggle from a few questions. The skill never registers the toggle itself — it prints the `claudetoggle add` command for review.
+- Stronger metadata validation at `add` time: missing or unknown `TOGGLE_API`, missing `TOGGLE_SCOPE`, and invalid `TOGGLE_SCOPE` values are now rejected with a clear error.
+- `list` and `doctor` warn when a slash-command symlink is stale or missing.
+
+### Changed
+
+- The reannounce counter is now serialised under a `flock`, removing a race where two concurrent dispatchers could lose a tick.
+- Sentinel files are created with a private umask (`077`).
+- `cmd_uninstall` removes the skill symlink only when it points back into our data home, so a user who replaced it with their own copy keeps it.
+
+### Notes
+
+- This is the first release with `SHA256SUMS`. To install the previous tag (`v0.1.0`), pass `--skip-verify` to `setup.sh`.
+
 ## [0.1.0] — 2026-04-26
 
 First public-ready cut.
