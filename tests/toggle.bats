@@ -17,19 +17,19 @@ teardown() {
 	[ -z "$output" ]
 }
 
-@test "toggle_files lists <name>/toggle.sh entries, sorted, skipping strays" {
-	mkdir -p "$CLAUDETOGGLE_HOME/foo" "$CLAUDETOGGLE_HOME/bar" \
-		"$CLAUDETOGGLE_HOME/ignored" "$CLAUDETOGGLE_HOME/empty"
-	: >"$CLAUDETOGGLE_HOME/foo/toggle.sh"
-	: >"$CLAUDETOGGLE_HOME/bar/toggle.sh"
+@test "toggle_files lists toggles/<name>/toggle.sh entries, sorted, skipping strays" {
+	local reg=$CLAUDETOGGLE_HOME/toggles
+	mkdir -p "$reg/foo" "$reg/bar" "$reg/ignored" "$reg/empty"
+	: >"$reg/foo/toggle.sh"
+	: >"$reg/bar/toggle.sh"
 	# Stray: no toggle.sh inside the dir → skipped
-	: >"$CLAUDETOGGLE_HOME/ignored/notes.txt"
-	# Stray: dotted dir (would be .lib/.bin/.state) → skipped by default glob
-	mkdir -p "$CLAUDETOGGLE_HOME/.lib"
-	: >"$CLAUDETOGGLE_HOME/.lib/toggle.sh"
+	: >"$reg/ignored/notes.txt"
+	# Sibling: framework lib dir is a sibling of toggles/, not under it
+	mkdir -p "$CLAUDETOGGLE_HOME/lib"
+	: >"$CLAUDETOGGLE_HOME/lib/scope.sh"
 	run toggle_files
 	[ "$status" -eq 0 ]
-	expected="$CLAUDETOGGLE_HOME/bar/toggle.sh"$'\n'"$CLAUDETOGGLE_HOME/foo/toggle.sh"
+	expected="$reg/bar/toggle.sh"$'\n'"$reg/foo/toggle.sh"
 	[ "$output" = "$expected" ]
 }
 
@@ -66,17 +66,17 @@ teardown() {
 
 @test "toggle_on creates the sentinel under .state" {
 	toggle_on global feat "" ""
-	[ -f "$CLAUDETOGGLE_HOME/.state/feat/global" ]
+	[ -f "$CLAUDETOGGLE_HOME/state/feat/global" ]
 }
 
 @test "toggle_off removes sentinel and counter" {
 	toggle_on session feat "" sid
 	toggle_seed_counter feat 3
-	[ -f "$CLAUDETOGGLE_HOME/.state/feat/sessions/sid" ]
-	[ -f "$CLAUDETOGGLE_HOME/.state/feat/counter" ]
+	[ -f "$CLAUDETOGGLE_HOME/state/feat/sessions/sid" ]
+	[ -f "$CLAUDETOGGLE_HOME/state/feat/counter" ]
 	toggle_off session feat "" sid
-	[ ! -f "$CLAUDETOGGLE_HOME/.state/feat/sessions/sid" ]
-	[ ! -f "$CLAUDETOGGLE_HOME/.state/feat/counter" ]
+	[ ! -f "$CLAUDETOGGLE_HOME/state/feat/sessions/sid" ]
+	[ ! -f "$CLAUDETOGGLE_HOME/state/feat/counter" ]
 }
 
 @test "toggle_on returns 1 when scope unavailable" {
@@ -91,12 +91,12 @@ teardown() {
 	[ "$one" = "1" ]
 	[ "$two" = "2" ]
 	[ "$three" = "3" ]
-	[ -f "$CLAUDETOGGLE_HOME/.state/feat/counter" ]
+	[ -f "$CLAUDETOGGLE_HOME/state/feat/counter" ]
 }
 
 @test "toggle_tick treats corrupt counter as 0" {
-	mkdir -p "$CLAUDETOGGLE_HOME/.state/feat"
-	printf 'garbage\n' >"$CLAUDETOGGLE_HOME/.state/feat/counter"
+	mkdir -p "$CLAUDETOGGLE_HOME/state/feat"
+	printf 'garbage\n' >"$CLAUDETOGGLE_HOME/state/feat/counter"
 	got=$(toggle_tick feat)
 	[ "$got" = "1" ]
 }

@@ -10,10 +10,10 @@
 #   CLAUDETOGGLE_DEBUG is set. Cheap no-op otherwise.
 hook_log() {
 	[ -n "${CLAUDETOGGLE_DEBUG:-}" ] || return 0
-	local home=${CLAUDETOGGLE_HOME:-${CLAUDE_HOME:-$HOME/.claude}/toggles}
+	local home=${CLAUDETOGGLE_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/claudetoggle}
 	mkdir -p "$home" 2>/dev/null || return 0
 	printf '[%s] %s\n' "${EPOCHSECONDS:-$(date +%s)}" "$*" \
-		>>"$home/.debug.log" 2>/dev/null || true
+		>>"$home/debug.log" 2>/dev/null || true
 }
 
 # block_userprompt REASON

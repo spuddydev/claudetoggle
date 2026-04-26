@@ -5,12 +5,20 @@ All notable changes are recorded here. Format follows [Keep a Changelog](https:/
 ## [Unreleased]
 
 ### Added
+- `setup.sh` — single curl-pipe-bash install entry point. Detects the latest release, fetches the tarball, places framework files under `$XDG_DATA_HOME/claudetoggle`, installs the CLI to `$PREFIX/bin/claudetoggle`, wires the dispatcher into `settings.json`. `--local` mode for development from a clone.
+- `bin/claudetoggle` — bash CLI with subcommands `add`, `remove`, `list`, `on`, `off`, `update`, `uninstall`, `doctor`, `help`.
 - PR template, bug and feature issue templates.
-- CHANGELOG.md.
-- README badge for CI.
+- CHANGELOG.md, README badges, GitHub repo description and topics.
 
 ### Changed
-- (Reserved for upcoming items.)
+- **Layout migrated to XDG Base Directory.** Data home is now `$XDG_DATA_HOME/claudetoggle/` (default `~/.local/share/claudetoggle/`) instead of `~/.claude/toggles/`. State sits under `<data>/state/` (no dot prefix). Debug log is `<data>/debug.log`. macOS works the same way via the XDG fallback.
+- **Install model is now CLI-driven.** `./install.sh` and the per-toggle directory dropping pattern are removed. Use `claudetoggle add <name|path>` to register; `claudetoggle remove <name>` to unregister.
+- **Permissions deny pattern** is now `*claudetoggle/state/<name>/*`. Single substring glob works regardless of `$XDG_DATA_HOME` overrides.
+- **Peer-script lib resolution idiom** is now `${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../../lib}` — two `..` because peer scripts live at `<data>/toggles/<name>/<peer>.sh`.
+- `uninstall.sh` is now a thin wrapper that forwards to `claudetoggle uninstall`.
+
+### Notes
+- The CLI is bash for v0.1.0. A native binary rewrite (Go) is planned for v0.2.0; the surface won't change.
 
 ## [0.1.0] — 2026-04-26
 

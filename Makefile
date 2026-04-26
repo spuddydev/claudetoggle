@@ -2,7 +2,7 @@ SHELL := /usr/bin/env bash
 
 # All shell sources we own. find tolerates missing dirs; wildcard drops
 # entries that do not exist on disk yet (install.sh, uninstall.sh).
-SH_FILES := $(shell find lib bin examples scripts -name '*.sh' 2>/dev/null) install.sh uninstall.sh
+SH_FILES := $(shell find lib bin examples scripts -name '*.sh' 2>/dev/null) bin/claudetoggle setup.sh uninstall.sh
 SH_FILES := $(wildcard $(SH_FILES))
 
 .PHONY: help test lint fmt fmt-check check hooks clean

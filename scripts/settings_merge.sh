@@ -43,7 +43,7 @@ settings_atomic_write() {
 # settings_lock_path
 # Lock file location, kept inside our own home rather than $CLAUDE_HOME/.
 settings_lock_path() {
-	printf '%s\n' "${CLAUDETOGGLE_HOME:-${CLAUDE_HOME:-$HOME/.claude}/toggles}/.settings.lock"
+	printf '%s\n' "${CLAUDETOGGLE_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/claudetoggle}/settings.lock"
 }
 
 # settings_with_lock CMD ARGS...
@@ -190,11 +190,12 @@ settings_remove_deny() {
 }
 
 # deny_globs_for_toggle NAME → print one Bash deny rule per write verb
-# targeting *.claude/toggles/.state/<name>/*. The single broad glob
-# covers sentinels and the shared counter alike.
+# targeting *claudetoggle/state/<name>/*. The leading * matches any path
+# prefix, so the rule works regardless of where XDG_DATA_HOME points.
+# The single broad glob covers sentinels and the shared counter alike.
 deny_globs_for_toggle() {
 	local name=$1 verb
-	local target="*.claude/toggles/.state/$name/*"
+	local target="*claudetoggle/state/$name/*"
 	for verb in touch rm rmdir mv cp chmod ln tee; do
 		printf 'Bash(%s %s)\n' "$verb" "$target"
 	done

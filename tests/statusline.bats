@@ -4,8 +4,8 @@ load test_helper
 
 write_toggle() {
 	local name=$1 scope=$2 extra=${3:-}
-	mkdir -p "$CLAUDETOGGLE_HOME/$name"
-	cat >"$CLAUDETOGGLE_HOME/$name/toggle.sh" <<EOF
+	mkdir -p "$CLAUDETOGGLE_HOME/toggles/$name"
+	cat >"$CLAUDETOGGLE_HOME/toggles/$name/toggle.sh" <<EOF
 TOGGLE_API=1
 TOGGLE_NAME=$name
 TOGGLE_SCOPE=$scope
