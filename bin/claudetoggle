@@ -397,6 +397,15 @@ cmd_uninstall() {
 			unwire_toggle "$name"
 		done
 	fi
+	# Clean up the skill symlink if it points into our data home.
+	local skill=$CLAUDE_HOME/skills/create-claudetoggle
+	if [ -L "$skill" ]; then
+		local target
+		target=$(readlink "$skill")
+		case $target in
+		"$CLAUDETOGGLE_HOME/"*) rm -f "$skill" ;;
+		esac
+	fi
 	if [ "$purge" -eq 1 ]; then
 		rm -f "$PREFIX/bin/claudetoggle"
 		rm -rf "$CLAUDETOGGLE_HOME"
