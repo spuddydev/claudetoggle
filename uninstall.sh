@@ -8,7 +8,7 @@
 set -o pipefail
 
 claude_home=${CLAUDE_HOME:-$HOME/.claude}
-toggle_home=${CLAUDETOGGLE_HOME:-$HOME/.claudetoggle}
+toggle_home=${CLAUDETOGGLE_HOME:-$claude_home/toggles}
 purge=0
 
 while [ $# -gt 0 ]; do
@@ -50,8 +50,9 @@ fi
 
 # Remove slash-command symlinks and deny rules per registered toggle.
 shopt -s nullglob
-for dir in "$toggle_home/toggles"/*/; do
+for dir in "$toggle_home"/*/; do
 	dir=${dir%/}
+	[ -r "$dir/toggle.sh" ] || continue
 	name=$(basename "$dir")
 	md=$claude_home/commands/$name.md
 	if [ -L "$md" ]; then
@@ -67,7 +68,7 @@ if [ "$purge" -eq 1 ]; then
 	rm -rf "$toggle_home"
 	printf 'uninstall: removed %s\n' "$toggle_home"
 else
-	# Drop only the symlinks we manage; leave state and toggles alone.
-	rm -f "$toggle_home/lib" "$toggle_home/bin"
-	printf 'uninstall: state preserved at %s/state (use --purge to remove)\n' "$toggle_home"
+	# Drop only the symlinks we manage; leave state and user toggles alone.
+	rm -f "$toggle_home/.lib" "$toggle_home/.bin"
+	printf 'uninstall: state preserved at %s/.state (use --purge to remove)\n' "$toggle_home"
 fi

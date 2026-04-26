@@ -12,7 +12,7 @@ set -o pipefail
 
 repo_dir=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 claude_home=${CLAUDE_HOME:-$HOME/.claude}
-toggle_home=${CLAUDETOGGLE_HOME:-$HOME/.claudetoggle}
+toggle_home=${CLAUDETOGGLE_HOME:-$claude_home/toggles}
 
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -43,12 +43,17 @@ done
 
 settings_file=$claude_home/settings.json
 
-mkdir -p "$toggle_home"/{toggles,state} "$claude_home/commands"
+mkdir -p "$toggle_home/.state" "$claude_home/commands"
 
-# Whole-directory symlinks for lib/ and bin/. Re-creating an existing
-# symlink updates its target without a dangling-link race.
-ln -snf "$repo_dir/lib" "$toggle_home/lib"
-ln -snf "$repo_dir/bin" "$toggle_home/bin"
+# Copy the framework's lib/ and bin/ into the toggle home as real files,
+# dot-prefixed so they sit alongside user toggle directories without
+# colliding with the registry glob ($home/*/toggle.sh). Re-running
+# install.sh re-copies, which is the documented upgrade path after
+# `git pull`. We rm-rf first so a removed file in the repo also goes.
+rm -rf "$toggle_home/.lib" "$toggle_home/.bin"
+cp -r "$repo_dir/lib" "$toggle_home/.lib"
+cp -r "$repo_dir/bin" "$toggle_home/.bin"
+chmod +x "$toggle_home/.bin"/*.sh
 
 settings_seed_if_missing "$settings_file"
 if ! settings_check_valid "$settings_file"; then
@@ -110,7 +115,7 @@ install_one_toggle() {
 	local idx=0 entry event matcher if_clause script script_path
 	for entry in "${TOGGLE_EXTRA_HOOKS[@]}"; do
 		IFS=$'\x1f' read -r event matcher if_clause script <<<"$entry"
-		script_path=$toggle_home/toggles/$name/$script
+		script_path=$toggle_home/$name/$script
 		settings_with_lock settings_add_extra_hook \
 			"$settings_file" "$name" "$idx" \
 			"$event" "$matcher" "$if_clause" "$script_path"
@@ -119,12 +124,14 @@ install_one_toggle() {
 }
 
 shopt -s nullglob
-for dir in "$toggle_home/toggles"/*/; do
+for dir in "$toggle_home"/*/; do
 	dir=${dir%/}
+	# Skip dotted siblings (.lib, .bin, .state) and any dir without toggle.sh.
+	[ -r "$dir/toggle.sh" ] || continue
 	install_one_toggle "$dir"
 done
 
-settings_with_lock settings_add_dispatch "$settings_file" "$toggle_home/bin"
+settings_with_lock settings_add_dispatch "$settings_file" "$toggle_home/.bin"
 
 # statusLine integration: do NOT mutate the user's statusLine.command.
 # Detect whether the user's statusline already sources our snippet; if
@@ -151,7 +158,7 @@ if [ "$sl_already_wired" -eq 0 ]; then
 claudetoggle is installed.
 ${sl_target:+To enable the statusline indicator, add the following to $sl_target:}${sl_target:-Set statusLine.command in $settings_file to a script that sources statusline.sh, or add it to your existing statusline. Example snippet:}
 
-  . "$toggle_home/bin/statusline.sh"
+  . "$toggle_home/.bin/statusline.sh"
   export CLAUDE_CWD="\$cwd" CLAUDE_SESSION_ID="\$session"
   left+="\$(claudetoggle_statusline)"
 

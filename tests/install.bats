@@ -6,9 +6,9 @@ setup() {
 	export TMP=$(mktemp -d)
 	export HOME=$TMP
 	export CLAUDE_HOME=$TMP/.claude
-	export CLAUDETOGGLE_HOME=$TMP/.claudetoggle
+	export CLAUDETOGGLE_HOME=$CLAUDE_HOME/toggles
 	export REPO=$(repo_root)
-	mkdir -p "$CLAUDETOGGLE_HOME/toggles"
+	mkdir -p "$CLAUDETOGGLE_HOME"
 }
 
 teardown() {
@@ -18,8 +18,8 @@ teardown() {
 # Drop a registry toggle into $CLAUDETOGGLE_HOME/toggles/<name>/.
 register() {
 	local name=$1 scope=${2:-session} extra=${3:-}
-	mkdir -p "$CLAUDETOGGLE_HOME/toggles/$name"
-	cat >"$CLAUDETOGGLE_HOME/toggles/$name/toggle.sh" <<EOF
+	mkdir -p "$CLAUDETOGGLE_HOME/$name"
+	cat >"$CLAUDETOGGLE_HOME/$name/toggle.sh" <<EOF
 TOGGLE_API=1
 TOGGLE_NAME=$name
 TOGGLE_SCOPE=$scope
@@ -27,7 +27,7 @@ TOGGLE_ON_MSG="$name on"
 TOGGLE_OFF_MSG="$name off"
 $extra
 EOF
-	cat >"$CLAUDETOGGLE_HOME/toggles/$name/$name.md" <<EOF
+	cat >"$CLAUDETOGGLE_HOME/$name/$name.md" <<EOF
 ---
 description: Toggle $name
 ---
@@ -39,8 +39,9 @@ EOF
 	register foo
 	run bash "$REPO/install.sh"
 	[ "$status" -eq 0 ]
-	[ -L "$CLAUDETOGGLE_HOME/lib" ]
-	[ -L "$CLAUDETOGGLE_HOME/bin" ]
+	[ -d "$CLAUDETOGGLE_HOME/.lib" ]
+	[ -f "$CLAUDETOGGLE_HOME/.lib/toggle.sh" ]
+	[ -f "$CLAUDETOGGLE_HOME/.bin/dispatch.sh" ]
 	[ -L "$CLAUDE_HOME/commands/foo.md" ]
 	jq -e '.hooks.UserPromptSubmit[0].hooks[0].command | contains("claudetoggle:dispatch")' "$CLAUDE_HOME/settings.json"
 	jq -e '.permissions.deny | length == 10' "$CLAUDE_HOME/settings.json"
@@ -78,8 +79,8 @@ EOF
 @test "deny templates target the toggle's state subtree" {
 	register foo
 	bash "$REPO/install.sh" >/dev/null
-	jq -e '.permissions.deny | any(. == "Bash(touch *.claudetoggle/state/foo/*)")' "$CLAUDE_HOME/settings.json"
-	jq -e '.permissions.deny | any(. == "Bash(* >> *.claudetoggle/state/foo/*)")' "$CLAUDE_HOME/settings.json"
+	jq -e '.permissions.deny | any(. == "Bash(touch *.claude/toggles/.state/foo/*)")' "$CLAUDE_HOME/settings.json"
+	jq -e '.permissions.deny | any(. == "Bash(* >> *.claude/toggles/.state/foo/*)")' "$CLAUDE_HOME/settings.json"
 }
 
 @test "refuses malformed settings.json" {
@@ -93,7 +94,7 @@ EOF
 
 @test "missing <name>.md skipped without error" {
 	register foo
-	rm "$CLAUDETOGGLE_HOME/toggles/foo/foo.md"
+	rm "$CLAUDETOGGLE_HOME/foo/foo.md"
 	run bash "$REPO/install.sh"
 	[ "$status" -eq 0 ]
 	[ ! -e "$CLAUDE_HOME/commands/foo.md" ]
@@ -101,8 +102,8 @@ EOF
 
 @test "TOGGLE_NAME mismatch aborts that toggle with file path; others continue" {
 	register foo
-	mkdir -p "$CLAUDETOGGLE_HOME/toggles/bad"
-	cat >"$CLAUDETOGGLE_HOME/toggles/bad/toggle.sh" <<'EOF'
+	mkdir -p "$CLAUDETOGGLE_HOME/bad"
+	cat >"$CLAUDETOGGLE_HOME/bad/toggle.sh" <<'EOF'
 TOGGLE_API=1
 TOGGLE_NAME=different
 TOGGLE_SCOPE=session
@@ -110,10 +111,10 @@ TOGGLE_ON_MSG="x"
 EOF
 	run bash "$REPO/install.sh"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"toggles/bad/toggle.sh"* ]]
+	[[ "$output" == *"bad/toggle.sh"* ]]
 	[[ "$output" == *"expected bad"* ]]
-	jq -e '.permissions.deny | any(. == "Bash(touch *.claudetoggle/state/foo/*)")' "$CLAUDE_HOME/settings.json"
-	jq -e '.permissions.deny | any(. == "Bash(touch *.claudetoggle/state/bad/*)") | not' "$CLAUDE_HOME/settings.json"
+	jq -e '.permissions.deny | any(. == "Bash(touch *.claude/toggles/.state/foo/*)")' "$CLAUDE_HOME/settings.json"
+	jq -e '.permissions.deny | any(. == "Bash(touch *.claude/toggles/.state/bad/*)") | not' "$CLAUDE_HOME/settings.json"
 }
 
 @test "statusLine.command is unchanged after install" {
@@ -129,8 +130,8 @@ EOF
 }
 
 @test "TOGGLE_EXTRA_HOOKS entry is registered with sentinel" {
-	mkdir -p "$CLAUDETOGGLE_HOME/toggles/bar"
-	cat >"$CLAUDETOGGLE_HOME/toggles/bar/toggle.sh" <<EOF
+	mkdir -p "$CLAUDETOGGLE_HOME/bar"
+	cat >"$CLAUDETOGGLE_HOME/bar/toggle.sh" <<EOF
 TOGGLE_API=1
 TOGGLE_NAME=bar
 TOGGLE_SCOPE=project
@@ -139,7 +140,7 @@ TOGGLE_OFF_MSG="bar off"
 TOGGLE_EXTRA_HOOKS=()
 TOGGLE_EXTRA_HOOKS+=("PreToolUse"\$'\x1f'"Bash"\$'\x1f'"Bash(git commit *)"\$'\x1f'"check.sh")
 EOF
-	: >"$CLAUDETOGGLE_HOME/toggles/bar/check.sh"
+	: >"$CLAUDETOGGLE_HOME/bar/check.sh"
 	bash "$REPO/install.sh" >/dev/null
 	got=$(jq -r '.hooks.PreToolUse[0].matcher' "$CLAUDE_HOME/settings.json")
 	[ "$got" = "Bash" ]

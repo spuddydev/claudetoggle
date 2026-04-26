@@ -4,8 +4,8 @@ load test_helper
 
 write_toggle() {
 	local name=$1 scope=$2 extra=${3:-}
-	mkdir -p "$TOGGLE_REGISTRY/$name"
-	cat >"$TOGGLE_REGISTRY/$name/toggle.sh" <<EOF
+	mkdir -p "$CLAUDETOGGLE_HOME/$name"
+	cat >"$CLAUDETOGGLE_HOME/$name/toggle.sh" <<EOF
 TOGGLE_API=1
 TOGGLE_NAME=$name
 TOGGLE_SCOPE=$scope
@@ -22,16 +22,15 @@ sl() {
 	# or sid to force a scope-unavailable code path.
 	local cwd=${1-$CWD} sid=${2-$SID}
 	bash -c '
-        export CLAUDETOGGLE_HOME="$1" TOGGLE_REGISTRY="$2"
-        export CLAUDE_CWD="$3" CLAUDE_SESSION_ID="$4"
+        export CLAUDETOGGLE_HOME="$1" CLAUDETOGGLE_LIB="$5/lib"
+        export CLAUDE_CWD="$2" CLAUDE_SESSION_ID="$3"
         . "$5/bin/statusline.sh"
         claudetoggle_statusline
-    ' _ "$CLAUDETOGGLE_HOME" "$TOGGLE_REGISTRY" "$cwd" "$sid" "$(repo_root)"
+    ' _ "$CLAUDETOGGLE_HOME" "$cwd" "$sid" "" "$(repo_root)"
 }
 
 setup() {
 	setup_isolated_home
-	export TOGGLE_REGISTRY="$CLAUDETOGGLE_HOME/toggles"
 	export CWD="$BATS_TEST_TMPDIR/cwd" SID=s1
 	mkdir -p "$CWD"
 	export LC_ALL=C
@@ -42,7 +41,7 @@ teardown() {
 }
 
 @test "no toggles registered → empty" {
-	mkdir -p "$TOGGLE_REGISTRY"
+	mkdir -p "$CLAUDETOGGLE_HOME"
 	got=$(sl)
 	[ -z "$got" ]
 }

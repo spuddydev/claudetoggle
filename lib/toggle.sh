@@ -1,45 +1,42 @@
 #!/usr/bin/env bash
 # Toggle registry.
 #
-# Each toggle lives at $TOGGLE_REGISTRY/<name>.sh and declares:
+# Each toggle lives at $CLAUDETOGGLE_HOME/<name>/toggle.sh and declares:
 #
-#   TOGGLE_NAME                       short name (must match filename stem)
+#   TOGGLE_API                        schema version (only "1" accepted)
+#   TOGGLE_NAME                       short name (must match directory name)
 #   TOGGLE_SCOPE                      "global", "project" or "session"
 #   TOGGLE_ON_MSG                     full rule text shown to the model when ON
 #   TOGGLE_OFF_MSG                    (optional) text shown when toggled OFF
 #   TOGGLE_MARKER                     (optional) substring in the slash-command body
 #   TOGGLE_REANNOUNCE_EVERY           (optional, default 0) re-inject ON_MSG every N prompts
-#   TOGGLE_ANNOUNCE_ON_SESSION_START  (optional, default 0) print ON_MSG at SessionStart
+#   TOGGLE_ANNOUNCE_ON_SESSION_START  (optional, default 1) print ON_MSG at SessionStart
 #   TOGGLE_ANNOUNCE_ON_TOGGLE         (optional, default 1) block prompt and announce on flip
 #   TOGGLE_STATUSLINE                 (optional, default 1) show name in statusline when ON
-#   TOGGLE_STATUSLINE_FN              (optional) function name returning a custom statusline
-#                                     fragment for this toggle (when ON). Receives no args.
+#   TOGGLE_EXTRA_HOOKS                (optional) array of extra event hooks installed alongside
+#
+# A registry file may also define a function `toggle_<name>_statusline`
+# to override the default statusline fragment when ON.
 #
 # That is the whole interface. The dispatcher and statusline iterate over
-# every file in the registry; adding a new toggle is just dropping a file
-# here and a matching commands/<name>.md.
+# every directory in $CLAUDETOGGLE_HOME (excluding dotted siblings like
+# .lib, .bin, .state) and source toggle.sh from each.
 
-# Source order matters: scope.sh provides scope_path, used below.
-# Resolve symlinks so this works whether install.sh symlinks the whole
-# lib/ directory or each file individually. The CLAUDETOGGLE_LIB override
+# Resolve symlinks so this works whether install.sh symlinks lib/ as a
+# whole directory or each file individually. The CLAUDETOGGLE_LIB override
 # lets a non-standard install point at the lib dir explicitly.
 # shellcheck source=lib/scope.sh
 . "${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}/scope.sh"
 
-TOGGLE_REGISTRY=${TOGGLE_REGISTRY:-$HOME/.claudetoggle/toggles}
-
-# Reannounce counters live under <feature>/counters/<sid>, deliberately
-# separate from <feature>/sessions/<sid> so a session-scoped sentinel
-# (a file) and the counter (also a file) cannot collide on the same path.
-
 # toggle_files → print every registered toggle file path on its own line.
-# Layout: $TOGGLE_REGISTRY/<name>/toggle.sh (directory-per-toggle).
-# Output is sorted under LC_ALL=C so registry order is reproducible across
-# locales. Silent when the registry is missing or empty so callers can pipe.
+# Layout: $CLAUDETOGGLE_HOME/<name>/toggle.sh. Default bash glob skips
+# dotted directories so .lib, .bin and .state are naturally excluded.
+# Output is sorted under LC_ALL=C so ordering is reproducible across
+# locales. Silent when the registry is empty so callers can pipe.
 toggle_files() {
-	[ -d "$TOGGLE_REGISTRY" ] || return 0
+	[ -d "$CLAUDETOGGLE_HOME" ] || return 0
 	local f found=()
-	for f in "$TOGGLE_REGISTRY"/*/toggle.sh; do
+	for f in "$CLAUDETOGGLE_HOME"/*/toggle.sh; do
 		[ -r "$f" ] && found+=("$f")
 	done
 	[ "${#found[@]}" -eq 0 ] && return 0
@@ -60,18 +57,15 @@ toggle_sentinel_for() {
 	scope_path "$1" "$2" "$3" "$4"
 }
 
-# toggle_counter_for NAME SESSION → per-session reannounce counter path.
-# Always session-scoped: two concurrent sessions in the same project must
-# not race the counter, and global toggles still want per-session cadence.
+# toggle_counter_for NAME → single shared reannounce counter for this
+# toggle. One counter across all sessions; reannounces fire on the global
+# tick budget rather than independently per session.
 toggle_counter_for() {
-	[ -n "$2" ] || return 1
-	printf '%s\n' "${CLAUDETOGGLE_HOME:-$HOME/.claudetoggle}/$1/counters/$2"
+	printf '%s\n' "$CLAUDETOGGLE_HOME/.state/$1/counter"
 }
 
 # toggle_active SCOPE NAME CWD SESSION → 0 if ON, 1 if OFF, 2 if the
-# scope key is unavailable (e.g. project toggle with no CWD). Distinct
-# codes so the dispatcher can skip silently rather than treating an
-# unavailable scope as OFF and wrongly flipping it.
+# scope key is unavailable (e.g. project toggle with no CWD).
 toggle_active() {
 	local sentinel
 	sentinel=$(toggle_sentinel_for "$1" "$2" "$3" "$4") || return 2
@@ -87,21 +81,20 @@ toggle_on() {
 	: >"$sentinel"
 }
 
-# toggle_off SCOPE NAME CWD SESSION → flip OFF: remove sentinel and any
-# session reannounce counter. Returns 1 if scope key is unavailable.
+# toggle_off SCOPE NAME CWD SESSION → flip OFF: remove sentinel and the
+# shared reannounce counter. Returns 1 if scope key is unavailable.
 toggle_off() {
-	local sentinel counter
+	local sentinel
 	sentinel=$(toggle_sentinel_for "$1" "$2" "$3" "$4") || return 1
 	rm -f "$sentinel"
-	counter=$(toggle_counter_for "$2" "$4") && rm -f "$counter"
-	return 0
+	rm -f "$(toggle_counter_for "$2")"
 }
 
-# toggle_tick NAME SESSION → increment the per-session reannounce
-# counter and print the new value. Returns 1 if no session id.
+# toggle_tick NAME → increment the shared reannounce counter and print
+# the new value.
 toggle_tick() {
 	local counter count=0
-	counter=$(toggle_counter_for "$1" "$2") || return 1
+	counter=$(toggle_counter_for "$1")
 	[ -r "$counter" ] && read -r count <"$counter"
 	case $count in '' | *[!0-9]*) count=0 ;; esac
 	count=$((count + 1))
@@ -110,14 +103,14 @@ toggle_tick() {
 	printf '%s\n' "$count"
 }
 
-# toggle_seed_counter NAME SESSION VALUE → set the counter to VALUE so
-# the next tick crosses the reannounce threshold. Used right after a
-# flip-to-ON to surface ON_MSG on the next ordinary prompt.
+# toggle_seed_counter NAME VALUE → set the counter to VALUE so the next
+# tick crosses the reannounce threshold. Used right after a flip-to-ON
+# to surface ON_MSG on the next ordinary prompt.
 toggle_seed_counter() {
 	local counter
-	counter=$(toggle_counter_for "$1" "$2") || return 1
+	counter=$(toggle_counter_for "$1")
 	mkdir -p "${counter%/*}"
-	printf '%s\n' "$3" >"$counter"
+	printf '%s\n' "$2" >"$counter"
 }
 
 # toggle_statusline_fn NAME → naming convention for an optional custom

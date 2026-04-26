@@ -10,7 +10,7 @@ The peer `commit-check.sh` runs as a `PreToolUse(Bash)` hook on `git commit *` a
 Install:
 
 ```sh
-cp -r examples/coauth ~/.claudetoggle/toggles/
+cp -r examples/coauth ~/.claude/toggles/
 ./install.sh
 ```
 

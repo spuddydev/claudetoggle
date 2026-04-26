@@ -4,7 +4,6 @@ load test_helper
 
 setup() {
 	setup_isolated_home
-	export TOGGLE_REGISTRY="$CLAUDETOGGLE_HOME/toggles"
 	load_lib toggle
 }
 
@@ -19,17 +18,18 @@ teardown() {
 }
 
 @test "toggle_files lists <name>/toggle.sh entries, sorted, skipping strays" {
-	mkdir -p "$TOGGLE_REGISTRY/foo" "$TOGGLE_REGISTRY/bar" \
-		"$TOGGLE_REGISTRY/ignored" "$TOGGLE_REGISTRY/empty"
-	: >"$TOGGLE_REGISTRY/foo/toggle.sh"
-	: >"$TOGGLE_REGISTRY/bar/toggle.sh"
+	mkdir -p "$CLAUDETOGGLE_HOME/foo" "$CLAUDETOGGLE_HOME/bar" \
+		"$CLAUDETOGGLE_HOME/ignored" "$CLAUDETOGGLE_HOME/empty"
+	: >"$CLAUDETOGGLE_HOME/foo/toggle.sh"
+	: >"$CLAUDETOGGLE_HOME/bar/toggle.sh"
 	# Stray: no toggle.sh inside the dir → skipped
-	: >"$TOGGLE_REGISTRY/ignored/notes.txt"
-	# Stray: top-level .sh file → skipped (not under a sub-directory)
-	: >"$TOGGLE_REGISTRY/loose.sh"
+	: >"$CLAUDETOGGLE_HOME/ignored/notes.txt"
+	# Stray: dotted dir (would be .lib/.bin/.state) → skipped by default glob
+	mkdir -p "$CLAUDETOGGLE_HOME/.lib"
+	: >"$CLAUDETOGGLE_HOME/.lib/toggle.sh"
 	run toggle_files
 	[ "$status" -eq 0 ]
-	expected="$TOGGLE_REGISTRY/bar/toggle.sh"$'\n'"$TOGGLE_REGISTRY/foo/toggle.sh"
+	expected="$CLAUDETOGGLE_HOME/bar/toggle.sh"$'\n'"$CLAUDETOGGLE_HOME/foo/toggle.sh"
 	[ "$output" = "$expected" ]
 }
 
@@ -53,33 +53,30 @@ teardown() {
 }
 
 @test "toggle_active returns 1 when off, 0 when on, 2 when scope unavailable" {
-	# Off
 	run toggle_active session feat "" sid
 	[ "$status" -eq 1 ]
-	# Scope unavailable
 	run toggle_active session feat "" ""
 	[ "$status" -eq 2 ]
 	run toggle_active project feat "" "sid"
 	[ "$status" -eq 2 ]
-	# On
 	toggle_on session feat "" sid
 	run toggle_active session feat "" sid
 	[ "$status" -eq 0 ]
 }
 
-@test "toggle_on creates the sentinel" {
+@test "toggle_on creates the sentinel under .state" {
 	toggle_on global feat "" ""
-	[ -f "$CLAUDETOGGLE_HOME/feat/global" ]
+	[ -f "$CLAUDETOGGLE_HOME/.state/feat/global" ]
 }
 
 @test "toggle_off removes sentinel and counter" {
 	toggle_on session feat "" sid
-	toggle_seed_counter feat sid 3
-	[ -f "$CLAUDETOGGLE_HOME/feat/sessions/sid" ]
-	[ -f "$CLAUDETOGGLE_HOME/feat/counters/sid" ]
+	toggle_seed_counter feat 3
+	[ -f "$CLAUDETOGGLE_HOME/.state/feat/sessions/sid" ]
+	[ -f "$CLAUDETOGGLE_HOME/.state/feat/counter" ]
 	toggle_off session feat "" sid
-	[ ! -f "$CLAUDETOGGLE_HOME/feat/sessions/sid" ]
-	[ ! -f "$CLAUDETOGGLE_HOME/feat/counters/sid" ]
+	[ ! -f "$CLAUDETOGGLE_HOME/.state/feat/sessions/sid" ]
+	[ ! -f "$CLAUDETOGGLE_HOME/.state/feat/counter" ]
 }
 
 @test "toggle_on returns 1 when scope unavailable" {
@@ -87,43 +84,37 @@ teardown() {
 	[ "$status" -eq 1 ]
 }
 
-@test "toggle_tick increments and persists" {
-	one=$(toggle_tick feat sid)
-	two=$(toggle_tick feat sid)
-	three=$(toggle_tick feat sid)
+@test "toggle_tick increments and persists; counter is shared across sessions" {
+	one=$(toggle_tick feat)
+	two=$(toggle_tick feat)
+	three=$(toggle_tick feat)
 	[ "$one" = "1" ]
 	[ "$two" = "2" ]
 	[ "$three" = "3" ]
-	[ -f "$CLAUDETOGGLE_HOME/feat/counters/sid" ]
+	[ -f "$CLAUDETOGGLE_HOME/.state/feat/counter" ]
 }
 
 @test "toggle_tick treats corrupt counter as 0" {
-	mkdir -p "$CLAUDETOGGLE_HOME/feat/counters"
-	printf 'garbage\n' >"$CLAUDETOGGLE_HOME/feat/counters/sid"
-	got=$(toggle_tick feat sid)
+	mkdir -p "$CLAUDETOGGLE_HOME/.state/feat"
+	printf 'garbage\n' >"$CLAUDETOGGLE_HOME/.state/feat/counter"
+	got=$(toggle_tick feat)
 	[ "$got" = "1" ]
 }
 
-@test "toggle_tick fails without session" {
-	run toggle_tick feat ""
-	[ "$status" -eq 1 ]
-}
-
 @test "toggle_seed_counter sets value, next tick crosses threshold" {
-	toggle_seed_counter feat sid 9
-	got=$(toggle_tick feat sid)
+	toggle_seed_counter feat 9
+	got=$(toggle_tick feat)
 	[ "$got" = "10" ]
 }
 
-@test "sentinel and counter never collide for session scope" {
+@test "sentinel and counter live at distinct paths under .state" {
 	toggle_on session feat "" sid
-	toggle_seed_counter feat sid 0
-	[ -f "$CLAUDETOGGLE_HOME/feat/sessions/sid" ]
-	[ -f "$CLAUDETOGGLE_HOME/feat/counters/sid" ]
-	# The two paths must be distinct files, never the same path.
+	toggle_seed_counter feat 0
 	s=$(toggle_sentinel_for session feat "" sid)
-	c=$(toggle_counter_for feat sid)
+	c=$(toggle_counter_for feat)
 	[ "$s" != "$c" ]
+	[ -f "$s" ]
+	[ -f "$c" ]
 }
 
 @test "toggle_statusline_fn derives name from toggle name" {

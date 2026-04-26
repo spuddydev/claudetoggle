@@ -9,8 +9,8 @@ This README is for toggle authors. See [CONTRIBUTING.md](CONTRIBUTING.md) if you
 Author a minimum-viable toggle:
 
 ```sh
-mkdir -p ~/.claudetoggle/toggles/foo
-cat >~/.claudetoggle/toggles/foo/toggle.sh <<'EOF'
+mkdir -p ~/.claude/toggles/foo
+cat >~/.claude/toggles/foo/toggle.sh <<'EOF'
 TOGGLE_API=1
 TOGGLE_NAME=foo
 TOGGLE_SCOPE=project
@@ -19,7 +19,7 @@ TOGGLE_OFF_MSG="foo is OFF for this project."
 TOGGLE_MARKER="<!-- foo-marker -->"
 EOF
 
-cat >~/.claudetoggle/toggles/foo/foo.md <<'EOF'
+cat >~/.claude/toggles/foo/foo.md <<'EOF'
 ---
 description: Toggle the foo policy for this project. User-invokable only.
 ---
@@ -34,10 +34,10 @@ Now in any Claude Code session: type `/foo` and the dispatcher flips the per-pro
 
 ## Architecture
 
-- **Registry** — every toggle is a directory at `~/.claudetoggle/toggles/<name>/`, holding a metadata file `toggle.sh`, a slash-command markdown `<name>.md`, and any peer scripts the toggle declares via `TOGGLE_EXTRA_HOOKS`.
-- **Dispatcher** — one shared `bin/dispatch.sh` is wired to `UserPromptSubmit` and `SessionStart`, iterates the registry, and handles every toggle's flip/announce/reannounce contract.
-- **Statusline** — one shared `bin/statusline.sh` defines `claudetoggle_statusline`, returning a leading-separator-then-name fragment per active toggle. Empty when nothing is active.
-- **Install** — `install.sh` symlinks the framework into `~/.claudetoggle/`, merges the dispatcher and per-toggle deny rules into `~/.claude/settings.json`, and symlinks slash-command markdowns into `~/.claude/commands/`.
+- **Registry** — every toggle is a directory at `~/.claude/toggles/<name>/`, holding a metadata file `toggle.sh`, a slash-command markdown `<name>.md`, and any peer scripts the toggle declares via `TOGGLE_EXTRA_HOOKS`.
+- **Dispatcher** — one shared dispatcher (installed at `~/.claude/toggles/.bin/dispatch.sh`) is wired to `UserPromptSubmit` and `SessionStart`, iterates the registry, and handles every toggle's flip/announce/reannounce contract.
+- **Statusline** — one shared statusline snippet (installed at `~/.claude/toggles/.bin/statusline.sh`) defines `claudetoggle_statusline`, returning a leading-separator-then-name fragment per active toggle. Empty when nothing is active.
+- **Install** — `install.sh` copies the framework into `~/.claude/toggles/.lib` and `~/.claude/toggles/.bin`, merges the dispatcher and per-toggle deny rules into `~/.claude/settings.json`, and symlinks slash-command markdowns into `~/.claude/commands/`.
 
 ## `TOGGLE_*` reference
 
@@ -75,18 +75,18 @@ TOGGLE_EXTRA_HOOKS+=("PreToolUse"$'\x1f'"Bash"$'\x1f'"Bash(git commit *)"$'\x1f'
 `script.sh` lives alongside `toggle.sh` in the toggle's directory. Peer scripts source the framework lib via:
 
 ```sh
-CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../../lib}
+CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../.lib}
 . "$CLAUDETOGGLE_LIB/hook_io.sh"
 ```
 
-Two `..` because peer scripts live two directories deep from `~/.claudetoggle/`.
+One `..` because peer scripts live at `~/.claude/toggles/<name>/peer.sh`, one level below the framework lib at `~/.claude/toggles/.lib/`.
 
 ## Statusline integration
 
 Add this to your existing statusline script (paste-ready):
 
 ```sh
-. "$HOME/.claudetoggle/bin/statusline.sh"
+. "$HOME/.claude/toggles/.bin/statusline.sh"
 export CLAUDE_CWD="$cwd" CLAUDE_SESSION_ID="$session"
 left+="$(claudetoggle_statusline)"
 ```
@@ -105,18 +105,17 @@ cd ~/projects/claudetoggle
 
 Override paths with `CLAUDE_HOME=`, `CLAUDETOGGLE_HOME=`, or `--prefix=DIR`.
 
-`./uninstall.sh` removes everything claudetoggle installed but preserves state. `./uninstall.sh --purge` also deletes `~/.claudetoggle/`.
+`./uninstall.sh` removes everything claudetoggle installed but preserves state. `./uninstall.sh --purge` also deletes `~/.claude/toggles/`.
 
-**Upgrade:** rerun `./install.sh` after editing any `toggle.sh`, after `git pull` if the framework's settings.json shape changed, or after adding a new `TOGGLE_EXTRA_HOOKS` entry. Lib and bin are symlinked so most code changes are picked up without a rerun.
+**Upgrade:** `cd <repo> && git pull && ./install.sh`. The install copies the framework's `lib/` and `bin/` into `~/.claude/toggles/.lib` and `~/.claude/toggles/.bin`; rerunning `install.sh` re-copies. Adding a toggle, editing one's metadata, or adding a `TOGGLE_EXTRA_HOOKS` entry also requires a rerun.
 
 ## Known limits
 
 - The statusline forks one subshell per registered toggle on every redraw. Fine at five toggles, sluggish at twenty. A cache will land if anyone reports it.
-- `lib/` and `bin/` are symlinked from the repo into `~/.claudetoggle/`, so the repo path is sticky — if you move the clone, rerun `./install.sh`.
 
 ## Troubleshooting
 
-Set `CLAUDETOGGLE_DEBUG=1` in your shell before running Claude Code; the dispatcher and helpers append timestamped entries to `~/.claudetoggle/hooks-debug.log`.
+Set `CLAUDETOGGLE_DEBUG=1` in your shell before running Claude Code; the dispatcher and helpers append timestamped entries to `~/.claude/toggles/.debug.log`.
 
 ## Licence
 

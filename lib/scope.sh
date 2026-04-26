@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Canonical state paths for toggles.
 #
+# All claudetoggle state lives under $CLAUDETOGGLE_HOME/.state, which
+# defaults to ${CLAUDE_HOME:-$HOME/.claude}/toggles/.state. The .state
+# dot-prefix keeps it out of the registry glob ($HOME/*/toggle.sh).
+#
 # Three scopes:
-#   global   ~/.claude/<feature>/global[/...parts]
-#   project  ~/.claude/<feature>/projects/<key>[/...parts]   key = sha256 of git root or cwd
-#   session  ~/.claude/<feature>/sessions/<id>[/...parts]
+#   global   <state>/<feature>/global[/...parts]
+#   project  <state>/<feature>/projects/<key>[/...parts]   key = sha256 of git root or cwd
+#   session  <state>/<feature>/sessions/<id>[/...parts]
 #
 # Helpers print paths. They never create directories — callers do that
 # immediately before writing.
 
-CLAUDETOGGLE_HOME="${CLAUDETOGGLE_HOME:-$HOME/.claudetoggle}"
+CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
+CLAUDETOGGLE_HOME="${CLAUDETOGGLE_HOME:-$CLAUDE_HOME/toggles}"
 
 # project_key CWD → 16-char sha256 prefix of the git root (or CWD if not in
 # a repo). Subdirectories of a repo therefore share project state.
@@ -26,7 +31,7 @@ project_key() {
 scope_path() {
 	local scope=$1 feature=$2 cwd=$3 session=$4
 	shift 4
-	local base=$CLAUDETOGGLE_HOME/$feature path
+	local base=$CLAUDETOGGLE_HOME/.state/$feature path
 	case $scope in
 	global) path=$base/global ;;
 	project)
