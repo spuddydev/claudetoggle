@@ -16,3 +16,5 @@ coverage/
 
 # Local-only state created during ad-hoc testing
 /tmp-home/
+
+.claude/

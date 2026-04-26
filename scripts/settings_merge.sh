@@ -47,20 +47,48 @@ settings_lock_path() {
 }
 
 # settings_with_lock CMD ARGS...
-# Execute CMD ARGS... while holding an exclusive flock on the lock file.
+# Execute CMD ARGS... while holding an exclusive lock. Prefers flock when
+# available; falls back to a portable mkdir-based lock with a short retry
+# loop on systems without it (notably stock macOS, which ships neither
+# flock nor a usable libexec equivalent). The fallback is best-effort:
+# concurrent installs serialise, but a process killed mid-write would
+# need a stale-lock cleanup. Acceptable for an interactive installer.
 # Test-only env hook CLAUDETOGGLE_INSTALL_SLEEP introduces a deterministic
 # pause AFTER acquiring the lock so two backgrounded installs interleave.
 settings_with_lock() {
 	local lock
 	lock=$(settings_lock_path)
 	mkdir -p "$(dirname "$lock")"
-	(
-		flock 9
-		if [ -n "${CLAUDETOGGLE_INSTALL_SLEEP:-}" ]; then
-			sleep "$CLAUDETOGGLE_INSTALL_SLEEP"
+	if command -v flock >/dev/null 2>&1; then
+		(
+			flock 9
+			if [ -n "${CLAUDETOGGLE_INSTALL_SLEEP:-}" ]; then
+				sleep "$CLAUDETOGGLE_INSTALL_SLEEP"
+			fi
+			"$@"
+		) 9>"$lock"
+		return $?
+	fi
+	# Portable fallback: mkdir is atomic on every POSIX filesystem.
+	local lockdir=${lock}.d tries=0
+	while ! mkdir "$lockdir" 2>/dev/null; do
+		tries=$((tries + 1))
+		if [ "$tries" -ge 600 ]; then
+			printf 'settings_with_lock: timed out waiting for %s\n' "$lockdir" >&2
+			return 1
 		fi
-		"$@"
-	) 9>"$lock"
+		sleep 0.1
+	done
+	# shellcheck disable=SC2064
+	trap "rmdir '$lockdir' 2>/dev/null || true" EXIT INT TERM
+	if [ -n "${CLAUDETOGGLE_INSTALL_SLEEP:-}" ]; then
+		sleep "$CLAUDETOGGLE_INSTALL_SLEEP"
+	fi
+	"$@"
+	local rc=$?
+	rmdir "$lockdir" 2>/dev/null || true
+	trap - EXIT INT TERM
+	return $rc
 }
 
 # settings_has_dispatch FILE → 0 if the dispatch sentinel is already present.

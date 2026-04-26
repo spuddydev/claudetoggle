@@ -462,7 +462,8 @@ cmd_version() {
 
 cmd_help() {
 	cat <<EOF
-claudetoggle — manage Claude Code toggles
+claudetoggle
+Manage Claude Code toggles
 
 Usage: claudetoggle <command> [args]
 
@@ -479,8 +480,6 @@ Commands:
   doctor               diagnostic dump
   version              print the installed version
   help                 this message
-
-First-time install: curl -sSfL https://raw.githubusercontent.com/spuddydev/claudetoggle/main/setup.sh | sh
 EOF
 }
 

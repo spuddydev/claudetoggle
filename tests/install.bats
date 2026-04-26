@@ -47,6 +47,28 @@ claudetoggle() {
 	"$PREFIX/bin/claudetoggle" "$@"
 }
 
+@test "settings_with_lock falls back to mkdir when flock is unavailable" {
+	# Sanity: both code paths exist.
+	grep -q 'command -v flock' "$REPO/scripts/settings_merge.sh"
+	grep -q 'mkdir "$lockdir"' "$REPO/scripts/settings_merge.sh"
+
+	# Drive the fallback by sourcing the helper with a flock that always
+	# reports missing. The lock is exercised via a real settings.json edit.
+	export CLAUDETOGGLE_HOME=$TMP/data
+	mkdir -p "$CLAUDETOGGLE_HOME"
+	printf '{}\n' >"$TMP/s.json"
+	bash -c '
+		set -eu
+		# Stub: make `command -v flock` always fail in this shell.
+		command() { if [ "$1" = "-v" ] && [ "$2" = "flock" ]; then return 1; fi; builtin command "$@"; }
+		. "$1/scripts/settings_merge.sh"
+		settings_with_lock settings_add_deny "$2" "Bash(touch /tmp/x)"
+	' _ "$REPO" "$TMP/s.json"
+	jq -e '.permissions.deny | any(. == "Bash(touch /tmp/x)")' "$TMP/s.json"
+	# Lockdir must be cleaned up after the operation.
+	[ ! -d "$CLAUDETOGGLE_HOME/settings.lock.d" ]
+}
+
 @test "setup.sh places framework files and the CLI on PATH" {
 	run run_setup
 	[ "$status" -eq 0 ]
