@@ -6,6 +6,16 @@ All notable changes are recorded here. Format follows [Keep a Changelog](https:/
 
 (Reserved.)
 
+## [0.2.1] — 2026-04-26
+
+### Fixed
+
+- macOS install no longer fails with `flock: command not found`. Both the settings.json merge helper and the toggle counter lock fall back to a portable `mkdir`-based lock when `flock` is missing.
+
+### Changed
+
+- `claudetoggle help` now opens with a two-line title and drops the trailing first-time-install line. The install command is documented in the readme and the release notes.
+
 ## [0.2.0] — 2026-04-26
 
 ### Added

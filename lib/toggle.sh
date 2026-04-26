@@ -73,20 +73,34 @@ toggle_active() {
 }
 
 # toggle_with_counter_lock NAME CMD ARGS...
-# Run CMD ARGS... while holding an exclusive flock on this toggle's counter
-# lockfile. Serialises read-modify-write of the counter file across
-# concurrent dispatcher invocations. The lockfile sits next to the counter
-# itself so it lives and dies with the toggle's state directory.
+# Run CMD ARGS... while holding an exclusive lock on this toggle's counter.
+# Prefers flock; falls back to mkdir on systems without it (macOS).
 toggle_with_counter_lock() {
 	local name=$1
 	shift
 	local lock=$CLAUDETOGGLE_HOME/state/$name/counter.lock
 	mkdir -p "${lock%/*}" 2>/dev/null || true
-	(
-		umask 077
-		flock 9
-		"$@"
-	) 9>"$lock"
+	if command -v flock >/dev/null 2>&1; then
+		(
+			umask 077
+			flock 9
+			"$@"
+		) 9>"$lock"
+		return $?
+	fi
+	local lockdir=${lock}.d tries=0
+	while ! mkdir "$lockdir" 2>/dev/null; do
+		tries=$((tries + 1))
+		# Counter contention is brief; bail after ~5s so a stuck lock
+		# can't wedge the dispatcher.
+		[ "$tries" -ge 50 ] && return 1
+		sleep 0.1
+	done
+	umask 077
+	"$@"
+	local rc=$?
+	rmdir "$lockdir" 2>/dev/null || true
+	return $rc
 }
 
 # toggle_on SCOPE NAME CWD SESSION → flip ON: ensure parent dir, touch
