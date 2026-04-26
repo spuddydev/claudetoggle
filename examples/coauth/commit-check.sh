@@ -9,7 +9,7 @@
 
 set -o pipefail
 
-CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../.lib}
+CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../../lib}
 # shellcheck source=/dev/null
 . "$CLAUDETOGGLE_LIB/scope.sh"
 # shellcheck source=/dev/null

@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # Canonical state paths for toggles.
 #
-# All claudetoggle state lives under $CLAUDETOGGLE_HOME/.state, which
-# defaults to ${CLAUDE_HOME:-$HOME/.claude}/toggles/.state. The .state
-# dot-prefix keeps it out of the registry glob ($HOME/*/toggle.sh).
+# Layout (XDG-compliant):
+#   $CLAUDETOGGLE_HOME/             default $XDG_DATA_HOME/claudetoggle (~/.local/share/claudetoggle)
+#     lib/, bin/                    framework helpers and shipped binaries
+#     toggles/<name>/               user toggles
+#     examples/<name>/              shipped reference toggles
+#     state/<feature>/...           sentinels and counters (this file's domain)
+#     debug.log, settings.lock
 #
-# Three scopes:
-#   global   <state>/<feature>/global[/...parts]
-#   project  <state>/<feature>/projects/<key>[/...parts]   key = sha256 of git root or cwd
-#   session  <state>/<feature>/sessions/<id>[/...parts]
+# Three scopes for state under state/<feature>/:
+#   global   state/<feature>/global[/...parts]
+#   project  state/<feature>/projects/<key>[/...parts]   key = sha256 of git root or cwd
+#   session  state/<feature>/sessions/<id>[/...parts]
 #
 # Helpers print paths. They never create directories — callers do that
 # immediately before writing.
 
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
-CLAUDETOGGLE_HOME="${CLAUDETOGGLE_HOME:-$CLAUDE_HOME/toggles}"
+CLAUDETOGGLE_HOME="${CLAUDETOGGLE_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/claudetoggle}"
 
 # project_key CWD → 16-char sha256 prefix of the git root (or CWD if not in
 # a repo). Subdirectories of a repo therefore share project state.
@@ -31,7 +35,7 @@ project_key() {
 scope_path() {
 	local scope=$1 feature=$2 cwd=$3 session=$4
 	shift 4
-	local base=$CLAUDETOGGLE_HOME/.state/$feature path
+	local base=$CLAUDETOGGLE_HOME/state/$feature path
 	case $scope in
 	global) path=$base/global ;;
 	project)

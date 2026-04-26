@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Toggle registry.
 #
-# Each toggle lives at $CLAUDETOGGLE_HOME/<name>/toggle.sh and declares:
+# Each toggle lives at $CLAUDETOGGLE_HOME/toggles/<name>/toggle.sh and declares:
 #
 #   TOGGLE_API                        schema version (only "1" accepted)
 #   TOGGLE_NAME                       short name (must match directory name)
@@ -19,8 +19,8 @@
 # to override the default statusline fragment when ON.
 #
 # That is the whole interface. The dispatcher and statusline iterate over
-# every directory in $CLAUDETOGGLE_HOME (excluding dotted siblings like
-# .lib, .bin, .state) and source toggle.sh from each.
+# every directory in $CLAUDETOGGLE_HOME/toggles/ and source toggle.sh from
+# each.
 
 # Resolve symlinks so this works whether install.sh symlinks lib/ as a
 # whole directory or each file individually. The CLAUDETOGGLE_LIB override
@@ -29,14 +29,14 @@
 . "${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}/scope.sh"
 
 # toggle_files → print every registered toggle file path on its own line.
-# Layout: $CLAUDETOGGLE_HOME/<name>/toggle.sh. Default bash glob skips
-# dotted directories so .lib, .bin and .state are naturally excluded.
-# Output is sorted under LC_ALL=C so ordering is reproducible across
-# locales. Silent when the registry is empty so callers can pipe.
+# Layout: $CLAUDETOGGLE_HOME/toggles/<name>/toggle.sh. Output is sorted
+# under LC_ALL=C so ordering is reproducible across locales. Silent when
+# the registry is empty so callers can pipe.
 toggle_files() {
-	[ -d "$CLAUDETOGGLE_HOME" ] || return 0
+	local registry=$CLAUDETOGGLE_HOME/toggles
+	[ -d "$registry" ] || return 0
 	local f found=()
-	for f in "$CLAUDETOGGLE_HOME"/*/toggle.sh; do
+	for f in "$registry"/*/toggle.sh; do
 		[ -r "$f" ] && found+=("$f")
 	done
 	[ "${#found[@]}" -eq 0 ] && return 0
@@ -61,7 +61,7 @@ toggle_sentinel_for() {
 # toggle. One counter across all sessions; reannounces fire on the global
 # tick budget rather than independently per session.
 toggle_counter_for() {
-	printf '%s\n' "$CLAUDETOGGLE_HOME/.state/$1/counter"
+	printf '%s\n' "$CLAUDETOGGLE_HOME/state/$1/counter"
 }
 
 # toggle_active SCOPE NAME CWD SESSION → 0 if ON, 1 if OFF, 2 if the

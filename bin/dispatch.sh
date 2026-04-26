@@ -25,7 +25,7 @@ export LC_ALL=C
 
 # Resolve framework lib regardless of whether install.sh symlinks lib/ as a
 # whole directory or pieces individually. Override with CLAUDETOGGLE_LIB.
-CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../.lib}
+CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../lib}
 
 # shellcheck source=lib/scope.sh
 . "$CLAUDETOGGLE_LIB/scope.sh"

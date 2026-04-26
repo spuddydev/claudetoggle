@@ -31,12 +31,12 @@ teardown() {
 
 @test "scope_path global ignores cwd and session" {
 	got=$(scope_path global feat "" "")
-	[ "$got" = "$CLAUDETOGGLE_HOME/.state/feat/global" ]
+	[ "$got" = "$CLAUDETOGGLE_HOME/state/feat/global" ]
 }
 
 @test "scope_path global appends parts" {
 	got=$(scope_path global feat "" "" sub file)
-	[ "$got" = "$CLAUDETOGGLE_HOME/.state/feat/global/sub/file" ]
+	[ "$got" = "$CLAUDETOGGLE_HOME/state/feat/global/sub/file" ]
 }
 
 @test "scope_path project requires cwd" {
@@ -48,7 +48,7 @@ teardown() {
 @test "scope_path project hashes cwd" {
 	got=$(scope_path project feat /tmp "")
 	key=$(project_key /tmp)
-	[ "$got" = "$CLAUDETOGGLE_HOME/.state/feat/projects/$key" ]
+	[ "$got" = "$CLAUDETOGGLE_HOME/state/feat/projects/$key" ]
 }
 
 @test "scope_path session requires session id" {
@@ -59,7 +59,7 @@ teardown() {
 
 @test "scope_path session uses raw session id" {
 	got=$(scope_path session feat "" abc123)
-	[ "$got" = "$CLAUDETOGGLE_HOME/.state/feat/sessions/abc123" ]
+	[ "$got" = "$CLAUDETOGGLE_HOME/state/feat/sessions/abc123" ]
 }
 
 @test "scope_path rejects unknown scope" {

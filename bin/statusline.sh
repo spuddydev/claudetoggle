@@ -21,7 +21,7 @@
 # functions MUST be fast and side-effect-free; they run inside a subshell
 # per toggle on every redraw.
 
-CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.lib}
+CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib}
 # shellcheck source=lib/scope.sh
 . "$CLAUDETOGGLE_LIB/scope.sh"
 # shellcheck source=lib/toggle.sh

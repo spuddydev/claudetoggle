@@ -2,11 +2,11 @@
 
 load test_helper
 
-# Helpers — write a registry toggle file under $CLAUDETOGGLE_HOME/<name>/toggle.sh.
+# Helpers — write a registry toggle file under $CLAUDETOGGLE_HOME/toggles/<name>/toggle.sh.
 write_toggle() {
 	local name=$1 scope=$2 extra=${3:-}
-	mkdir -p "$CLAUDETOGGLE_HOME/$name"
-	cat >"$CLAUDETOGGLE_HOME/$name/toggle.sh" <<EOF
+	mkdir -p "$CLAUDETOGGLE_HOME/toggles/$name"
+	cat >"$CLAUDETOGGLE_HOME/toggles/$name/toggle.sh" <<EOF
 TOGGLE_API=1
 TOGGLE_NAME=$name
 TOGGLE_SCOPE=$scope
@@ -54,7 +54,7 @@ session_input() {
 	[ "$(jq -r .decision <<<"$output")" = "block" ]
 	[ "$(jq -r .reason <<<"$output")" = "coauth is ON" ]
 	key=$(. "$(repo_root)/lib/scope.sh" && project_key "$CWD")
-	[ -f "$CLAUDETOGGLE_HOME/.state/coauth/projects/$key" ]
+	[ -f "$CLAUDETOGGLE_HOME/state/coauth/projects/$key" ]
 }
 
 @test "case 2: second /coauth toggles OFF, emits OFF_MSG, sentinel removed" {
@@ -64,7 +64,7 @@ session_input() {
 	[ "$status" -eq 0 ]
 	[ "$(jq -r .reason <<<"$output")" = "coauth is OFF" ]
 	key=$(. "$(repo_root)/lib/scope.sh" && project_key "$CWD")
-	[ ! -f "$CLAUDETOGGLE_HOME/.state/coauth/projects/$key" ]
+	[ ! -f "$CLAUDETOGGLE_HOME/state/coauth/projects/$key" ]
 }
 
 @test "case 3: plain prompt with active toggle ticks, reannounces after threshold" {
@@ -142,7 +142,7 @@ session_input() {
 	run_dispatch UserPromptSubmit "$(prompt_input '/silent')"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
-	[ -f "$CLAUDETOGGLE_HOME/.state/silent/sessions/$SID" ]
+	[ -f "$CLAUDETOGGLE_HOME/state/silent/sessions/$SID" ]
 }
 
 @test "case 12: flip-to-ON does NOT also tick on the same prompt" {
@@ -151,7 +151,7 @@ session_input() {
 	run_dispatch UserPromptSubmit "$(prompt_input '/foo')"
 	[ "$(jq -r .decision <<<"$output")" = "block" ]
 	# Counter was seeded to 0 (REANNOUNCE_EVERY-1) and never ticked this turn.
-	read -r count <"$CLAUDETOGGLE_HOME/.state/foo/counter"
+	read -r count <"$CLAUDETOGGLE_HOME/state/foo/counter"
 	[ "$count" = "0" ]
 }
 
@@ -164,8 +164,8 @@ session_input() {
 }
 
 @test "case 14: TOGGLE_API=2 rejected; other toggles continue" {
-	mkdir -p "$CLAUDETOGGLE_HOME/old"
-	cat >"$CLAUDETOGGLE_HOME/old/toggle.sh" <<'EOF'
+	mkdir -p "$CLAUDETOGGLE_HOME/toggles/old"
+	cat >"$CLAUDETOGGLE_HOME/toggles/old/toggle.sh" <<'EOF'
 TOGGLE_API=2
 TOGGLE_NAME=old
 TOGGLE_SCOPE=session
@@ -178,8 +178,8 @@ EOF
 }
 
 @test "case 15: TOGGLE_API unset rejected; other toggles continue" {
-	mkdir -p "$CLAUDETOGGLE_HOME/legacy"
-	cat >"$CLAUDETOGGLE_HOME/legacy/toggle.sh" <<'EOF'
+	mkdir -p "$CLAUDETOGGLE_HOME/toggles/legacy"
+	cat >"$CLAUDETOGGLE_HOME/toggles/legacy/toggle.sh" <<'EOF'
 TOGGLE_NAME=legacy
 TOGGLE_SCOPE=session
 TOGGLE_ON_MSG="legacy is ON"
