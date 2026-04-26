@@ -121,3 +121,23 @@ teardown() {
 	got=$(toggle_statusline_fn coauth)
 	[ "$got" = "toggle_coauth_statusline" ]
 }
+
+@test "toggle_on creates sentinel with mode 600" {
+	toggle_on global feat "" ""
+	mode=$(stat -c '%a' "$CLAUDETOGGLE_HOME/state/feat/global")
+	[ "$mode" = "600" ]
+}
+
+@test "toggle_tick is serialised under the counter lock (no lost updates)" {
+	# Spawn N background ticks that all increment the same counter. Without
+	# a lock the read-modify-write would race and the final value would be
+	# less than N. With the lock, the final value must equal N.
+	local n=20 i pids=()
+	for ((i = 0; i < n; i++)); do
+		(toggle_tick race >/dev/null) &
+		pids+=($!)
+	done
+	for p in "${pids[@]}"; do wait "$p"; done
+	read -r final <"$CLAUDETOGGLE_HOME/state/race/counter"
+	[ "$final" = "$n" ]
+}

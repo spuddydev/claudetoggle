@@ -173,3 +173,95 @@ EOF
 	[ -d "$CLAUDETOGGLE_HOME/toggles/coauth" ]
 	[ -L "$CLAUDE_HOME/commands/coauth.md" ]
 }
+
+@test "claudetoggle add --dry-run reports actions without writing" {
+	run_setup >/dev/null
+	src=$(fixture_toggle foo session)
+	cp "$CLAUDE_HOME/settings.json" "$TMP/before"
+	run claudetoggle add --dry-run "$src"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--dry-run foo"* ]]
+	[[ "$output" == *"deny rules"* ]]
+	[[ "$output" == *"No files written"* ]]
+	[ ! -d "$CLAUDETOGGLE_HOME/toggles/foo" ]
+	[ ! -L "$CLAUDE_HOME/commands/foo.md" ]
+	diff "$TMP/before" "$CLAUDE_HOME/settings.json"
+}
+
+@test "claudetoggle add --dry-run still validates metadata" {
+	run_setup >/dev/null
+	src=$TMP/fixtures/bad
+	mkdir -p "$src"
+	cat >"$src/toggle.sh" <<'EOF'
+TOGGLE_API=1
+TOGGLE_NAME=different
+TOGGLE_SCOPE=session
+TOGGLE_ON_MSG="x"
+EOF
+	run claudetoggle add --dry-run "$src"
+	[ "$status" -ne 0 ]
+}
+
+@test "claudetoggle add fails on missing TOGGLE_SCOPE" {
+	run_setup >/dev/null
+	src=$TMP/fixtures/no_scope
+	mkdir -p "$src"
+	cat >"$src/toggle.sh" <<'EOF'
+TOGGLE_API=1
+TOGGLE_NAME=no_scope
+TOGGLE_ON_MSG="x"
+EOF
+	run claudetoggle add "$src"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"TOGGLE_SCOPE"* ]]
+}
+
+@test "claudetoggle add fails on invalid TOGGLE_SCOPE" {
+	run_setup >/dev/null
+	src=$TMP/fixtures/bad_scope
+	mkdir -p "$src"
+	cat >"$src/toggle.sh" <<'EOF'
+TOGGLE_API=1
+TOGGLE_NAME=bad_scope
+TOGGLE_SCOPE=universe
+TOGGLE_ON_MSG="x"
+EOF
+	run claudetoggle add "$src"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"global, project or session"* ]]
+}
+
+@test "claudetoggle remove --dry-run reports actions without removing" {
+	run_setup >/dev/null
+	src=$(fixture_toggle foo session)
+	claudetoggle add "$src" >/dev/null
+	cp "$CLAUDE_HOME/settings.json" "$TMP/before"
+	run claudetoggle remove --dry-run foo
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--dry-run foo"* ]]
+	[[ "$output" == *"No files written"* ]]
+	[ -d "$CLAUDETOGGLE_HOME/toggles/foo" ]
+	[ -L "$CLAUDE_HOME/commands/foo.md" ]
+	diff "$TMP/before" "$CLAUDE_HOME/settings.json"
+}
+
+@test "claudetoggle version prints the recorded VERSION" {
+	run_setup --version=v9.9.9 >/dev/null
+	run claudetoggle version
+	[ "$status" -eq 0 ]
+	[ "$output" = "claudetoggle v9.9.9" ]
+	run claudetoggle --version
+	[ "$status" -eq 0 ]
+	[ "$output" = "claudetoggle v9.9.9" ]
+}
+
+@test "claudetoggle list flags a stale slash-command symlink" {
+	run_setup >/dev/null
+	src=$(fixture_toggle foo session)
+	claudetoggle add "$src" >/dev/null
+	# Break the symlink target so the link dangles.
+	rm -f "$CLAUDETOGGLE_HOME/toggles/foo/foo.md"
+	run claudetoggle list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"WARN: stale slash-command symlink"* ]]
+}

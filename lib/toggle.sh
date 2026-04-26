@@ -72,13 +72,34 @@ toggle_active() {
 	[ -f "$sentinel" ]
 }
 
+# toggle_with_counter_lock NAME CMD ARGS...
+# Run CMD ARGS... while holding an exclusive flock on this toggle's counter
+# lockfile. Serialises read-modify-write of the counter file across
+# concurrent dispatcher invocations. The lockfile sits next to the counter
+# itself so it lives and dies with the toggle's state directory.
+toggle_with_counter_lock() {
+	local name=$1
+	shift
+	local lock=$CLAUDETOGGLE_HOME/state/$name/counter.lock
+	mkdir -p "${lock%/*}" 2>/dev/null || true
+	(
+		umask 077
+		flock 9
+		"$@"
+	) 9>"$lock"
+}
+
 # toggle_on SCOPE NAME CWD SESSION → flip ON: ensure parent dir, touch
-# the sentinel. Returns 1 if scope key is unavailable.
+# the sentinel. Returns 1 if scope key is unavailable. State files are
+# created with umask 077 so other local users cannot read or alter them.
 toggle_on() {
 	local sentinel
 	sentinel=$(toggle_sentinel_for "$1" "$2" "$3" "$4") || return 1
-	mkdir -p "${sentinel%/*}"
-	: >"$sentinel"
+	(
+		umask 077
+		mkdir -p "${sentinel%/*}"
+		: >"$sentinel"
+	)
 }
 
 # toggle_off SCOPE NAME CWD SESSION → flip OFF: remove sentinel and the
@@ -90,11 +111,9 @@ toggle_off() {
 	rm -f "$(toggle_counter_for "$2")"
 }
 
-# toggle_tick NAME → increment the shared reannounce counter and print
-# the new value.
-toggle_tick() {
-	local counter count=0
-	counter=$(toggle_counter_for "$1")
+# Internal: the read-modify-write body run under the counter lock.
+_toggle_tick_locked() {
+	local counter=$1 count=0
 	[ -r "$counter" ] && read -r count <"$counter"
 	case $count in '' | *[!0-9]*) count=0 ;; esac
 	count=$((count + 1))
@@ -103,14 +122,27 @@ toggle_tick() {
 	printf '%s\n' "$count"
 }
 
+# toggle_tick NAME → increment the shared reannounce counter and print
+# the new value. Locked so concurrent dispatchers cannot lose updates.
+toggle_tick() {
+	local counter
+	counter=$(toggle_counter_for "$1")
+	toggle_with_counter_lock "$1" _toggle_tick_locked "$counter"
+}
+
 # toggle_seed_counter NAME VALUE → set the counter to VALUE so the next
 # tick crosses the reannounce threshold. Used right after a flip-to-ON
 # to surface ON_MSG on the next ordinary prompt.
 toggle_seed_counter() {
 	local counter
 	counter=$(toggle_counter_for "$1")
+	toggle_with_counter_lock "$1" _toggle_seed_counter_locked "$counter" "$2"
+}
+
+_toggle_seed_counter_locked() {
+	local counter=$1 value=$2
 	mkdir -p "${counter%/*}"
-	printf '%s\n' "$2" >"$counter"
+	printf '%s\n' "$value" >"$counter"
 }
 
 # toggle_statusline_fn NAME → naming convention for an optional custom

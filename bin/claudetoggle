@@ -62,14 +62,10 @@ read_toggle_meta() {
 	)
 }
 
-# wire_toggle DIR — register one toggle dir. Validates metadata, symlinks
-# slash-command markdown, merges TOGGLE_EXTRA_HOOKS, appends deny rules.
-wire_toggle() {
-	local dir=$1 name
-	name=$(basename "$dir")
-	local toggle_sh=$dir/toggle.sh
-	[ -r "$toggle_sh" ] || die "no toggle.sh in $dir"
-
+# validate_toggle_meta TOGGLE_SH NAME → 0 if metadata is sound.
+# Sourced in a subshell so caller's environment is untouched.
+validate_toggle_meta() {
+	local toggle_sh=$1 name=$2
 	(
 		# shellcheck disable=SC1090
 		. "$toggle_sh"
@@ -83,7 +79,30 @@ wire_toggle() {
 				"$toggle_sh" "${TOGGLE_API:-<unset>}" >&2
 			exit 1
 		}
-	) || return 1
+		[ -n "${TOGGLE_SCOPE:-}" ] || {
+			printf 'claudetoggle: %s missing TOGGLE_SCOPE.\n' "$toggle_sh" >&2
+			exit 1
+		}
+		case ${TOGGLE_SCOPE} in
+		global | project | session) ;;
+		*)
+			printf 'claudetoggle: %s declares TOGGLE_SCOPE=%q; expected global, project or session.\n' \
+				"$toggle_sh" "$TOGGLE_SCOPE" >&2
+			exit 1
+			;;
+		esac
+	)
+}
+
+# wire_toggle DIR — register one toggle dir. Validates metadata, symlinks
+# slash-command markdown, merges TOGGLE_EXTRA_HOOKS, appends deny rules.
+wire_toggle() {
+	local dir=$1 name
+	name=$(basename "$dir")
+	local toggle_sh=$dir/toggle.sh
+	[ -r "$toggle_sh" ] || die "no toggle.sh in $dir"
+
+	validate_toggle_meta "$toggle_sh" "$name" || return 1
 
 	local md_src=$dir/$name.md
 	local md_dst=$CLAUDE_HOME/commands/$name.md
@@ -131,7 +150,17 @@ unwire_toggle() {
 }
 
 cmd_add() {
-	local source=$1
+	local source='' dry_run=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--dry-run) dry_run=1 ;;
+		-*) die "add: unknown argument $1" ;;
+		*)
+			if [ -z "$source" ]; then source=$1; else die "add: too many arguments"; fi
+			;;
+		esac
+		shift
+	done
 	[ -n "$source" ] || die "add requires a toggle name or path. See: claudetoggle help"
 
 	local src_dir name
@@ -150,6 +179,11 @@ cmd_add() {
 		die "$name is already registered at $dst_dir. Use 'claudetoggle remove $name' first."
 	fi
 
+	if [ "$dry_run" -eq 1 ]; then
+		dry_run_add "$src_dir" "$name"
+		return $?
+	fi
+
 	mkdir -p "$CLAUDETOGGLE_HOME/toggles"
 	cp -r "$src_dir" "$dst_dir"
 	if ! wire_toggle "$dst_dir"; then
@@ -161,13 +195,70 @@ cmd_add() {
 		"$(read_toggle_meta "$dst_dir/toggle.sh" | cut -d'|' -f2)"
 }
 
+# dry_run_add SRC_DIR NAME — print what `add` would do without touching disk.
+dry_run_add() {
+	local src_dir=$1 name=$2
+	local toggle_sh=$src_dir/toggle.sh
+	[ -r "$toggle_sh" ] || die "no toggle.sh in $src_dir"
+	validate_toggle_meta "$toggle_sh" "$name" || return 1
+
+	say "claudetoggle add --dry-run $name"
+	printf '  source:        %s\n' "$src_dir"
+	printf '  destination:   %s/toggles/%s\n' "$CLAUDETOGGLE_HOME" "$name"
+	local md_src=$src_dir/$name.md
+	local md_dst=$CLAUDE_HOME/commands/$name.md
+	if [ -r "$md_src" ]; then
+		printf '  slash-command: symlink %s -> %s\n' "$md_dst" "$md_src"
+	else
+		printf '  slash-command: (none — %s missing in source)\n' "$name.md"
+	fi
+
+	local rules
+	mapfile -t rules < <(deny_globs_for_toggle "$name")
+	printf '  deny rules:    %d entries appended to permissions.deny[]\n' "${#rules[@]}"
+	local r
+	for r in "${rules[@]}"; do
+		printf '    + %s\n' "$r"
+	done
+
+	# Source the metadata in a subshell to read TOGGLE_EXTRA_HOOKS without
+	# polluting the calling environment.
+	local count entries
+	count=$(
+		# shellcheck disable=SC1090
+		. "$toggle_sh"
+		printf '%d' "${#TOGGLE_EXTRA_HOOKS[@]}"
+	)
+	if [ "$count" -gt 0 ]; then
+		printf '  extra hooks:   %d entries appended to settings.json hooks\n' "$count"
+		entries=$(
+			# shellcheck disable=SC1090
+			. "$toggle_sh"
+			local i=0 entry event matcher if_clause script
+			for entry in "${TOGGLE_EXTRA_HOOKS[@]}"; do
+				IFS=$'\x1f' read -r event matcher if_clause script <<<"$entry"
+				printf '    [%d] event=%s matcher=%s if=%s script=%s\n' \
+					"$i" "$event" "$matcher" "$if_clause" "$script"
+				i=$((i + 1))
+			done
+		)
+		printf '%s\n' "$entries"
+	else
+		printf '  extra hooks:   none\n'
+	fi
+	printf '\nNo files written. Re-run without --dry-run to apply.\n'
+}
+
 cmd_remove() {
-	local name=$1 keep_state=0
-	shift 2>/dev/null || true
+	local name='' keep_state=0 dry_run=0
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--keep-state) keep_state=1 ;;
-		*) die "remove: unknown argument $1" ;;
+		--dry-run) dry_run=1 ;;
+		-*) die "remove: unknown argument $1" ;;
+		*)
+			if [ -z "$name" ]; then name=$1; else die "remove: too many arguments"; fi
+			;;
 		esac
 		shift
 	done
@@ -175,6 +266,11 @@ cmd_remove() {
 
 	local dir=$CLAUDETOGGLE_HOME/toggles/$name
 	[ -d "$dir" ] || die "$name is not registered."
+
+	if [ "$dry_run" -eq 1 ]; then
+		dry_run_remove "$name" "$keep_state"
+		return 0
+	fi
 
 	unwire_toggle "$name"
 	rm -rf "$dir"
@@ -184,6 +280,32 @@ cmd_remove() {
 	printf 'claudetoggle: removed %s.\n' "$name"
 }
 
+# dry_run_remove NAME KEEP_STATE — print what `remove` would do.
+dry_run_remove() {
+	local name=$1 keep_state=$2
+	say "claudetoggle remove --dry-run $name"
+	printf '  toggle dir:    %s/toggles/%s (deleted)\n' "$CLAUDETOGGLE_HOME" "$name"
+	local md=$CLAUDE_HOME/commands/$name.md
+	if [ -L "$md" ]; then
+		printf '  slash-command: %s (symlink removed)\n' "$md"
+	else
+		printf '  slash-command: %s (no symlink to remove)\n' "$md"
+	fi
+	local rules
+	mapfile -t rules < <(deny_globs_for_toggle "$name")
+	printf '  deny rules:    %d entries removed from permissions.deny[]\n' "${#rules[@]}"
+	printf '  hook entries:  any tagged "# claudetoggle:%s:" removed\n' "$name"
+	local state_dir=$CLAUDETOGGLE_HOME/state/$name
+	if [ "$keep_state" -eq 1 ]; then
+		printf '  state:         %s preserved (--keep-state)\n' "$state_dir"
+	elif [ -d "$state_dir" ]; then
+		printf '  state:         %s removed\n' "$state_dir"
+	else
+		printf '  state:         %s (none on disk)\n' "$state_dir"
+	fi
+	printf '\nNo files written. Re-run without --dry-run to apply.\n'
+}
+
 cmd_list() {
 	local registry=$CLAUDETOGGLE_HOME/toggles
 	if [ ! -d "$registry" ] || [ -z "$(toggle_files)" ]; then
@@ -191,17 +313,27 @@ cmd_list() {
 		return 0
 	fi
 	printf '%-20s %-9s %s\n' NAME SCOPE STATE
-	local f name scope on off active_rc
+	local f name scope on off active_rc state_str md warn
 	while IFS= read -r f; do
 		IFS='|' read -r name scope on off < <(read_toggle_meta "$f")
 		: "$on" "$off"
 		active_rc=0
 		toggle_active "$scope" "$name" "$PWD" "${CLAUDE_SESSION_ID:-}" || active_rc=$?
 		case $active_rc in
-		0) printf '%-20s %-9s ON\n' "$name" "$scope" ;;
-		1) printf '%-20s %-9s off\n' "$name" "$scope" ;;
-		2) printf '%-20s %-9s n/a (no %s context)\n' "$name" "$scope" "$scope" ;;
+		0) state_str="ON" ;;
+		1) state_str="off" ;;
+		2) state_str="n/a (no $scope context)" ;;
 		esac
+		# Warn if the slash-command symlink is broken or replaced. The toggle
+		# itself still works, but `/<name>` won't be discoverable in Claude Code.
+		md=$CLAUDE_HOME/commands/$name.md
+		warn=
+		if [ -L "$md" ] && [ ! -e "$md" ]; then
+			warn=" [WARN: stale slash-command symlink at $md]"
+		elif [ ! -e "$md" ] && [ -r "$CLAUDETOGGLE_HOME/toggles/$name/$name.md" ]; then
+			warn=" [WARN: slash-command missing at $md]"
+		fi
+		printf '%-20s %-9s %s%s\n' "$name" "$scope" "$state_str" "$warn"
 	done < <(toggle_files)
 }
 
@@ -277,6 +409,9 @@ cmd_uninstall() {
 
 cmd_doctor() {
 	say 'claudetoggle: doctor'
+	local v=unknown
+	[ -r "$CLAUDETOGGLE_HOME/VERSION" ] && read -r v <"$CLAUDETOGGLE_HOME/VERSION"
+	printf '  version           = %s\n' "$v"
 	printf '  CLAUDE_HOME       = %s\n' "$CLAUDE_HOME"
 	printf '  CLAUDETOGGLE_HOME = %s\n' "$CLAUDETOGGLE_HOME"
 	printf '  CLAUDETOGGLE_LIB  = %s\n' "$CLAUDETOGGLE_LIB"
@@ -305,6 +440,15 @@ cmd_doctor() {
 	fi
 }
 
+cmd_version() {
+	local vfile=$CLAUDETOGGLE_HOME/VERSION v=
+	if [ -r "$vfile" ]; then
+		read -r v <"$vfile"
+	fi
+	[ -n "$v" ] || v=unknown
+	printf 'claudetoggle %s\n' "$v"
+}
+
 cmd_help() {
 	cat <<EOF
 claudetoggle — manage Claude Code toggles
@@ -313,13 +457,16 @@ Usage: claudetoggle <command> [args]
 
 Commands:
   add <name|path>      register a shipped example or a local directory
-  remove <name>        unregister and delete a toggle (use --keep-state to preserve state)
+                       (--dry-run to preview without writing)
+  remove <name>        unregister and delete a toggle (--keep-state to preserve state,
+                       --dry-run to preview)
   list                 show registered toggles and their state
   on <name>            flip a toggle ON in the current scope
   off <name>           flip a toggle OFF in the current scope
   update               re-run the latest setup.sh
   uninstall            unwire claudetoggle (use --purge to also delete data)
   doctor               diagnostic dump
+  version              print the installed version
   help                 this message
 
 First-time install: curl -sSfL https://raw.githubusercontent.com/spuddydev/claudetoggle/main/setup.sh | sh
@@ -338,6 +485,7 @@ off) cmd_off "$@" ;;
 update) cmd_update "$@" ;;
 uninstall) cmd_uninstall "$@" ;;
 doctor) cmd_doctor "$@" ;;
+version | --version | -v) cmd_version ;;
 help | --help | -h) cmd_help ;;
 *)
 	printf 'claudetoggle: unknown command %q. See: claudetoggle help\n' "$cmd" >&2
