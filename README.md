@@ -1,89 +1,143 @@
 # claudetoggle
 
-Tiny Bash framework for adding toggleable Claude Code hooks. One declaration file per toggle, one generic dispatcher, one statusline indicator. Drop a directory in, run install, get a `/yourtoggle` slash command that flips a per-project, per-session, or global rule and announces the new state to the model.
+[![ci](https://github.com/spuddydev/claudetoggle/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/spuddydev/claudetoggle/actions/workflows/ci.yml)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-This README is for toggle authors. See [CONTRIBUTING.md](CONTRIBUTING.md) if you want to hack on the framework itself.
+Add `/yourtoggle` slash commands to Claude Code with one file. Each toggle flips a rule on or off — for the project, the session, or globally — and tells the model the new state.
 
-## 60-second walkthrough
+> Want to hack on the framework itself? See [CONTRIBUTING.md](CONTRIBUTING.md). Release log: [CHANGELOG.md](CHANGELOG.md).
 
-Author a minimum-viable toggle:
+## Why you'd use this
+
+A toggle is a one-liner for a behaviour you want to switch on and off mid-conversation. Real examples:
+
+- **`/coauth`** — flip the `Co-Authored-By: Claude` trailer policy for this repo. Type `/coauth` once, every commit Claude writes from now on includes the trailer (or doesn't).
+- **`/devlog`** — keep a running journal of decisions in `.claude/devlog/` for this session.
+- **`/precommit`** — turn pre-commit hooks off for an emergency hotfix without touching `--no-verify` everywhere.
+- **`/safetynet`** — refuse `git push --force`, `rm -rf` and friends until you flip it back off.
+
+Without a framework, each of these means writing a hook script, editing `settings.json`, adding a slash-command markdown, telling the model the rule changed, plus reannouncing it every few prompts so it doesn't forget. claudetoggle does all of that from one short metadata file per toggle.
+
+## Quick start
+
+**1. Install:**
 
 ```sh
-mkdir -p ~/.claude/toggles/foo
-cat >~/.claude/toggles/foo/toggle.sh <<'EOF'
-TOGGLE_API=1
-TOGGLE_NAME=foo
-TOGGLE_SCOPE=project
-TOGGLE_ON_MSG="foo is ON for this project — be very careful with file deletes."
-TOGGLE_OFF_MSG="foo is OFF for this project."
-TOGGLE_MARKER="<!-- foo-marker -->"
-EOF
-
-cat >~/.claude/toggles/foo/foo.md <<'EOF'
----
-description: Toggle the foo policy for this project. User-invokable only.
----
-<!-- foo-marker -->
-The user just typed `/foo`. The dispatcher already flipped state and announced. Acknowledge in one short line.
-EOF
-
+git clone https://github.com/spuddydev/claudetoggle ~/projects/claudetoggle
+cd ~/projects/claudetoggle
 ./install.sh
 ```
 
-Now in any Claude Code session: type `/foo` and the dispatcher flips the per-project sentinel, blocks the prompt, and tells the model the new state. Type `/foo` again to flip back. The statusline shows `foo` while ON.
-
-## Architecture
-
-- **Registry** — every toggle is a directory at `~/.claude/toggles/<name>/`, holding a metadata file `toggle.sh`, a slash-command markdown `<name>.md`, and any peer scripts the toggle declares via `TOGGLE_EXTRA_HOOKS`.
-- **Dispatcher** — one shared dispatcher (installed at `~/.claude/toggles/.bin/dispatch.sh`) is wired to `UserPromptSubmit` and `SessionStart`, iterates the registry, and handles every toggle's flip/announce/reannounce contract.
-- **Statusline** — one shared statusline snippet (installed at `~/.claude/toggles/.bin/statusline.sh`) defines `claudetoggle_statusline`, returning a leading-separator-then-name fragment per active toggle. Empty when nothing is active.
-- **Install** — `install.sh` copies the framework into `~/.claude/toggles/.lib` and `~/.claude/toggles/.bin`, merges the dispatcher and per-toggle deny rules into `~/.claude/settings.json`, and symlinks slash-command markdowns into `~/.claude/commands/`.
-
-## `TOGGLE_*` reference
-
-| Variable | Default | Description |
-|---|---|---|
-| `TOGGLE_API` | (required) | Schema version. Only `1` is accepted. Unset rejected. |
-| `TOGGLE_NAME` | (required) | Short name. Must match the directory name. |
-| `TOGGLE_SCOPE` | (required) | One of `global`, `project`, `session`. |
-| `TOGGLE_ON_MSG` | (required) | Text shown to the model when the toggle is flipped ON or reannounced. |
-| `TOGGLE_OFF_MSG` | (required) | Text shown when flipped OFF. |
-| `TOGGLE_MARKER` | (none) | Optional substring in the slash-command markdown body for forward-compatible detection. |
-| `TOGGLE_REANNOUNCE_EVERY` | `0` | Reinject `ON_MSG` after this many ordinary prompts. `0` means announce once on flip and never again. |
-| `TOGGLE_ANNOUNCE_ON_SESSION_START` | `1` | Print `ON_MSG` at session start when the toggle is active. |
-| `TOGGLE_ANNOUNCE_ON_TOGGLE` | `1` | Block the prompt and announce on flip. Set to `0` for silent toggles whose effect is purely behind-the-scenes. |
-| `TOGGLE_STATUSLINE` | `1` | Show this toggle on the statusline when active. |
-| `TOGGLE_EXTRA_HOOKS` | empty array | One entry per extra event hook. See below. |
-
-A registry file may also define a function `toggle_<name>_statusline` to override the default statusline fragment. The function is called in a subshell on every redraw, so it must be fast and side-effect-free.
-
-## `TOGGLE_EXTRA_HOOKS`
-
-For toggles that need to register additional hook entries (typically `PreToolUse(Bash)` enforcement scripts), declare them as an array of pipe-separated entries. The separator is the ASCII unit-separator `\x1f`, which avoids quoting collisions with anything that might appear in `if` clauses.
+**2. Author a toggle.** Drop a directory under `~/.claude/toggles/`:
 
 ```sh
+mkdir -p ~/.claude/toggles/safetynet
+cat >~/.claude/toggles/safetynet/toggle.sh <<'EOF'
+TOGGLE_API=1
+TOGGLE_NAME=safetynet
+TOGGLE_SCOPE=session
+TOGGLE_ON_MSG="safetynet is ON: refuse git push --force, rm -rf, and any irreversible filesystem operation. Ask the user to flip it off if they really want it."
+TOGGLE_OFF_MSG="safetynet is OFF."
+TOGGLE_MARKER="<!-- safetynet-marker -->"
+EOF
+
+cat >~/.claude/toggles/safetynet/safetynet.md <<'EOF'
+---
+description: Toggle the safety net for this session. User-invokable only.
+---
+<!-- safetynet-marker -->
+The user just typed `/safetynet`. The dispatcher already flipped state and announced. Acknowledge in one short line.
+EOF
+```
+
+**3. Run install again** to wire it up:
+
+```sh
+./install.sh
+```
+
+**4. In Claude Code, type `/safetynet`.** The toggle flips on, the model sees the new rule, the statusline shows `safetynet`. Type it again to flip off.
+
+That's the whole loop. Two files plus a re-run of `install.sh`.
+
+## How a toggle works
+
+Every toggle lives at `~/.claude/toggles/<name>/` with at minimum:
+
+- `toggle.sh` — six lines of metadata (name, scope, the on and off messages).
+- `<name>.md` — the slash-command body Claude Code parses; tiny.
+
+When the user types `/<name>`:
+
+1. A single shared dispatcher (set up by `install.sh`) intercepts the prompt.
+2. It flips a tiny sentinel file under `~/.claude/toggles/.state/<name>/`.
+3. It blocks the prompt and tells the model the new state — that's how the rule "lands" without needing the model to read disk.
+4. The next time the model talks, it knows the rule is on (or off).
+
+You don't write the dispatcher. You don't edit `settings.json`. You write the metadata file and an install rerun does the rest.
+
+## The metadata file in detail
+
+Every toggle declares these:
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `TOGGLE_API` | yes | — | Schema version. Set to `1`. |
+| `TOGGLE_NAME` | yes | — | Short name. Must match the directory name. |
+| `TOGGLE_SCOPE` | yes | — | `global`, `project`, or `session`. |
+| `TOGGLE_ON_MSG` | yes | — | Text injected to the model when flipped on or reannounced. |
+| `TOGGLE_OFF_MSG` | yes | — | Text shown when flipped off. |
+| `TOGGLE_MARKER` | optional | none | Substring in the slash-command markdown body for forward-compatible detection. Recommended. |
+| `TOGGLE_REANNOUNCE_EVERY` | optional | `0` | Reinject `ON_MSG` every N prompts. `0` = announce once on flip, never again. |
+| `TOGGLE_ANNOUNCE_ON_SESSION_START` | optional | `1` | Print `ON_MSG` at session start when the toggle is on. |
+| `TOGGLE_ANNOUNCE_ON_TOGGLE` | optional | `1` | Block the prompt and announce on flip. Set to `0` for silent toggles whose effect is purely behind-the-scenes. |
+| `TOGGLE_STATUSLINE` | optional | `1` | Show this toggle on the statusline when on. |
+| `TOGGLE_EXTRA_HOOKS` | optional | empty | One entry per extra event hook (see below). |
+
+A toggle may also define a function `toggle_<name>_statusline` to override the default statusline fragment. The function is called per redraw inside a subshell, so it must be fast and side-effect-free.
+
+## Adding extra enforcement scripts
+
+Sometimes a toggle isn't just "tell the model the rule" — you want to **enforce** it with a hook. Example: `/precommit` should make `git commit` fail when on.
+
+Drop a peer script in the toggle's directory and register it via `TOGGLE_EXTRA_HOOKS`:
+
+```sh
+# ~/.claude/toggles/precommit/toggle.sh
+TOGGLE_API=1
+TOGGLE_NAME=precommit
+TOGGLE_SCOPE=project
+TOGGLE_ON_MSG="precommit is ON: pre-commit hooks must run."
+TOGGLE_OFF_MSG="precommit is OFF: skipping pre-commit hooks for this turn."
+TOGGLE_MARKER="<!-- precommit-marker -->"
+
+# When precommit is OFF, run a peer script before every git commit to
+# strip --no-verify (or whatever your gate is).
 TOGGLE_EXTRA_HOOKS=()
-TOGGLE_EXTRA_HOOKS+=("Event"$'\x1f'"Matcher"$'\x1f'"if-clause"$'\x1f'"script.sh")
+TOGGLE_EXTRA_HOOKS+=("PreToolUse"$'\x1f'"Bash"$'\x1f'"Bash(git commit *)"$'\x1f'"check.sh")
 ```
 
-Concrete example from `examples/coauth/toggle.sh`:
+The four pipe-separated fields are: **event** (e.g. `PreToolUse`), **matcher** (e.g. `Bash`), **if-clause** (Claude Code's filter syntax, e.g. `Bash(git commit *)`), **script** (relative to the toggle's directory). The separator `$'\x1f'` is the ASCII unit-separator — chosen because it never appears inside an `if`-clause.
+
+Your peer script reads the hook's stdin JSON and decides what to do. Source the framework helpers like this:
 
 ```sh
-TOGGLE_EXTRA_HOOKS+=("PreToolUse"$'\x1f'"Bash"$'\x1f'"Bash(git commit *)"$'\x1f'"commit-check.sh")
-```
-
-`script.sh` lives alongside `toggle.sh` in the toggle's directory. Peer scripts source the framework lib via:
-
-```sh
+#!/usr/bin/env bash
 CLAUDETOGGLE_LIB=${CLAUDETOGGLE_LIB:-$(dirname "$(readlink -f "$0")")/../.lib}
 . "$CLAUDETOGGLE_LIB/hook_io.sh"
+. "$CLAUDETOGGLE_LIB/scope.sh"
+
+# Read input, decide, then either exit 0 (allow) or:
+#   deny_pretooluse "your reason here"
 ```
 
-One `..` because peer scripts live at `~/.claude/toggles/<name>/peer.sh`, one level below the framework lib at `~/.claude/toggles/.lib/`.
+After editing `TOGGLE_EXTRA_HOOKS` or adding a peer script, **rerun `./install.sh`** to wire it into `settings.json`.
+
+See [`examples/coauth/`](examples/coauth/) for a complete worked example.
 
 ## Statusline integration
 
-Add this to your existing statusline script (paste-ready):
+Add this to the script your statusline already runs (the one referenced by `statusLine.command` in `settings.json`):
 
 ```sh
 . "$HOME/.claude/toggles/.bin/statusline.sh"
@@ -91,31 +145,36 @@ export CLAUDE_CWD="$cwd" CLAUDE_SESSION_ID="$session"
 left+="$(claudetoggle_statusline)"
 ```
 
-Where `$cwd` and `$session` come from your statusline's existing JSON parse. The function emits a leading separator when output is non-empty so you can append unconditionally; empty stdout when nothing is active. Override the separator with `CLAUDETOGGLE_STATUSLINE_SEP=` if needed; the default is ` │ `.
+`$cwd` and `$session` come from your statusline's existing JSON parse. The function emits a leading separator only when output is non-empty, so you append unconditionally and get nothing when no toggles are on.
 
-`install.sh` does not mutate your `statusLine.command`. It detects whether your statusline already sources the snippet; if not, it prints the integration block to stdout.
+`install.sh` prints this snippet for you if it detects you haven't wired it in yet. It does **not** mutate your existing statusline script — that's yours.
 
 ## Install / uninstall / upgrade
 
 ```sh
-git clone https://github.com/<you>/claudetoggle ~/projects/claudetoggle
-cd ~/projects/claudetoggle
-./install.sh
+./install.sh                    # one-time setup, then re-run after editing toggles
+./uninstall.sh                  # remove framework wiring; preserves state under .state/
+./uninstall.sh --purge          # also delete state and ~/.claude/toggles/
 ```
 
-Override paths with `CLAUDE_HOME=`, `CLAUDETOGGLE_HOME=`, or `--prefix=DIR`.
+**To upgrade:** `cd ~/projects/claudetoggle && git pull && ./install.sh`. The install copies the framework's `lib/` and `bin/` into `~/.claude/toggles/.lib` and `~/.claude/toggles/.bin`; rerunning re-copies. Standard pattern, like any CLI tool.
 
-`./uninstall.sh` removes everything claudetoggle installed but preserves state. `./uninstall.sh --purge` also deletes `~/.claude/toggles/`.
+Override paths with `CLAUDE_HOME=...`, `CLAUDETOGGLE_HOME=...`, or `--prefix=DIR`.
 
-**Upgrade:** `cd <repo> && git pull && ./install.sh`. The install copies the framework's `lib/` and `bin/` into `~/.claude/toggles/.lib` and `~/.claude/toggles/.bin`; rerunning `install.sh` re-copies. Adding a toggle, editing one's metadata, or adding a `TOGGLE_EXTRA_HOOKS` entry also requires a rerun.
+## Troubleshooting
+
+Set `CLAUDETOGGLE_DEBUG=1` in your shell. The dispatcher and helpers append timestamped lines to `~/.claude/toggles/.debug.log`. Tail it while you reproduce the issue.
+
+You can drive the dispatcher directly to inspect its behaviour:
+
+```sh
+printf '{"hook_event_name":"UserPromptSubmit","prompt":"/coauth","cwd":"'"$PWD"'","session_id":"x"}' \
+  | bash ~/.claude/toggles/.bin/dispatch.sh UserPromptSubmit
+```
 
 ## Known limits
 
 - The statusline forks one subshell per registered toggle on every redraw. Fine at five toggles, sluggish at twenty. A cache will land if anyone reports it.
-
-## Troubleshooting
-
-Set `CLAUDETOGGLE_DEBUG=1` in your shell before running Claude Code; the dispatcher and helpers append timestamped entries to `~/.claude/toggles/.debug.log`.
 
 ## Licence
 
