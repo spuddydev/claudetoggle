@@ -28,6 +28,8 @@ That fetches the latest release, places framework files under `$XDG_DATA_HOME/cl
 
 If `~/.local/bin` isn't on your `$PATH`, the installer prints the exact line to add to your shell config.
 
+Tagged releases ship with a `SHA256SUMS` asset and the installer verifies the tarball against it before unpacking. Set `CLAUDETOGGLE_SKIP_VERIFY=1` (or pass `--skip-verify`) only if you really need to bypass the check.
+
 **From a clone, for development or audit-first install:**
 
 ```sh

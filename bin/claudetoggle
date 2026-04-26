@@ -366,11 +366,13 @@ cmd_off() {
 }
 
 cmd_update() {
+	# Pass-through args land on setup.sh, e.g. `claudetoggle update --skip-verify`
+	# or `claudetoggle update --version=v0.2.0`.
 	local setup_url=https://raw.githubusercontent.com/spuddydev/claudetoggle/main/setup.sh
 	if command -v curl >/dev/null 2>&1; then
-		curl -sSfL "$setup_url" | sh
+		curl -sSfL "$setup_url" | sh -s -- "$@"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -qO- "$setup_url" | sh
+		wget -qO- "$setup_url" | sh -s -- "$@"
 	else
 		die "neither curl nor wget is available; install one and retry."
 	fi
