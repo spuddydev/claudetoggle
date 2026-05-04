@@ -343,3 +343,17 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"TOGGLE_API"* ]]
 }
+
+@test "claudetoggle add wires deny rules end to end" {
+	# Regression: the CLI used `mapfile -t`, which is bash 4 only. macOS
+	# still ships bash 3.2, so the call printed an error and silently left
+	# the rules array empty — the toggle registered but its state directory
+	# went unprotected. The portable replacement must populate the array
+	# and the integration must persist the rules into settings.json.
+	run_setup >/dev/null
+	src=$(fixture_toggle deny_check session)
+	run claudetoggle add "$src"
+	[ "$status" -eq 0 ]
+	jq -e '.permissions.deny | any(. == "Bash(touch *claudetoggle/state/deny_check/*)")' \
+		"$CLAUDE_HOME/settings.json"
+}

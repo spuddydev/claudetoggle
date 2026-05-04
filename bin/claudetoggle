@@ -48,6 +48,23 @@ die() {
 	exit 1
 }
 
+# Portable substitute for `mapfile -t NAME`. macOS still ships bash 3.2,
+# which has neither mapfile nor readarray. Reads one line per element
+# from stdin into the named global array, with no trimming. Empty input
+# yields an empty array.
+read_lines_into() {
+	local __name=$1 __line __idx=0
+	# Reset the target array. eval rather than declare -g because 3.2
+	# also lacks declare -g; an unset+typeset pair stays local to a
+	# function so we go through eval to write at the caller's scope.
+	eval "$__name=()"
+	while IFS= read -r __line; do
+		# shellcheck disable=SC1087
+		eval "${__name}[\$__idx]=\$__line"
+		__idx=$((__idx + 1))
+	done
+}
+
 # Source a registry file in a subshell and emit selected metadata as
 # pipe-delimited lines: TOGGLE_NAME|TOGGLE_SCOPE|TOGGLE_ON_MSG|TOGGLE_OFF_MSG.
 # Used by `list` and per-toggle wiring routines without leaking vars.
@@ -122,7 +139,7 @@ wire_toggle() {
 	# shellcheck disable=SC1090
 	. "$toggle_sh"
 
-	mapfile -t rules < <(deny_globs_for_toggle "$name")
+	read_lines_into rules < <(deny_globs_for_toggle "$name")
 	settings_with_lock settings_add_deny "$settings_file" "${rules[@]}"
 
 	local idx=0 entry event matcher if_clause script script_path
@@ -144,7 +161,7 @@ unwire_toggle() {
 	[ -L "$md" ] && rm -f "$md"
 	if [ -e "$settings_file" ] && settings_check_valid "$settings_file"; then
 		settings_with_lock settings_remove_tagged "$settings_file" "# claudetoggle:$name:"
-		mapfile -t rules < <(deny_globs_for_toggle "$name")
+		read_lines_into rules < <(deny_globs_for_toggle "$name")
 		settings_with_lock settings_remove_deny "$settings_file" "${rules[@]}"
 	fi
 }
@@ -214,7 +231,7 @@ dry_run_add() {
 	fi
 
 	local rules
-	mapfile -t rules < <(deny_globs_for_toggle "$name")
+	read_lines_into rules < <(deny_globs_for_toggle "$name")
 	printf '  deny rules:    %d entries appended to permissions.deny[]\n' "${#rules[@]}"
 	local r
 	for r in "${rules[@]}"; do
@@ -292,7 +309,7 @@ dry_run_remove() {
 		printf '  slash-command: %s (no symlink to remove)\n' "$md"
 	fi
 	local rules
-	mapfile -t rules < <(deny_globs_for_toggle "$name")
+	read_lines_into rules < <(deny_globs_for_toggle "$name")
 	printf '  deny rules:    %d entries removed from permissions.deny[]\n' "${#rules[@]}"
 	printf '  hook entries:  any tagged "# claudetoggle:%s:" removed\n' "$name"
 	local state_dir=$CLAUDETOGGLE_HOME/state/$name
