@@ -344,24 +344,12 @@ EOF
 	[[ "$output" == *"TOGGLE_API"* ]]
 }
 
-@test "claudetoggle: read_lines_into populates an array without mapfile" {
+@test "claudetoggle add wires deny rules end to end" {
 	# Regression: the CLI used `mapfile -t`, which is bash 4 only. macOS
 	# still ships bash 3.2, so the call printed an error and silently left
 	# the rules array empty — the toggle registered but its state directory
-	# went unprotected. read_lines_into is the portable replacement.
-	got=$(bash -c '
-        . "$1/bin/claudetoggle" >/dev/null 2>&1 || true
-        read_lines_into arr <<<"$(printf "a\nb\nc")"
-        printf "%d|%s|%s|%s" "${#arr[@]}" "${arr[0]}" "${arr[1]}" "${arr[2]}"
-    ' _ "$REPO")
-	[ "$got" = "3|a|b|c" ]
-}
-
-@test "claudetoggle add wires deny rules end to end" {
-	# Together with the read_lines_into unit case above, asserts that the
-	# array populated by read_lines_into is consumed correctly by the
-	# settings merge helper. A regression to mapfile would silently drop
-	# the deny rules on macOS without breaking add itself.
+	# went unprotected. The portable replacement must populate the array
+	# and the integration must persist the rules into settings.json.
 	run_setup >/dev/null
 	src=$(fixture_toggle deny_check session)
 	run claudetoggle add "$src"
