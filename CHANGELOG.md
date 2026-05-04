@@ -6,6 +6,12 @@ All notable changes are recorded here. Format follows [Keep a Changelog](https:/
 
 (Reserved.)
 
+## [0.3.1] — 2026-05-04
+
+### Fixed
+
+- macOS install no longer dropped a toggle's deny rules. Adding a toggle on a Mac printed `mapfile: command not found` and then registered the toggle anyway with no protective deny rules around its state directory. The CLI now uses a portable replacement that works on bash 3.2 and up.
+
 ## [0.3.0] — 2026-05-04
 
 ### Fixed
