@@ -59,9 +59,9 @@ s() {
 	jq -e '.permissions.deny | any(. == "Bash(touch *claudetoggle/state/devlog/*)")' "$CLAUDE_HOME/settings.json"
 }
 
-@test "/coauth flips ON, sentinel created, block reason matches ON_MSG" {
+@test "/coauth flips ON, sentinel created, ON_MSG injected as additionalContext" {
 	out=$(dispatch UserPromptSubmit "$(p '/coauth')")
-	got=$(jq -r .reason <<<"$out")
+	got=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$out")
 	[[ "$got" == *"coauth is ON"* ]]
 	key=$(. "$REPO/lib/scope.sh" && project_key "$CWD")
 	[ -f "$CLAUDETOGGLE_HOME/state/coauth/projects/$key" ]
