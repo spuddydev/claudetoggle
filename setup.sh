@@ -259,7 +259,11 @@ Next:
   claudetoggle list            # show registered toggles and state
   claudetoggle help            # full reference
 
-Statusline integration (paste into your statusline script if you want indicators):
+Statusline integration. Pipe Claude Code's JSON to claudetoggle:
+  fragment=\$(printf '%s' "\$input" | claudetoggle statusline)
+  printf '%s%s\n' "\$your_status" "\$fragment"
+
+Or, if your statusline is bash with \$cwd / \$session already parsed:
   . "$CLAUDETOGGLE_HOME/bin/statusline.sh"
   export CLAUDE_CWD="\$cwd" CLAUDE_SESSION_ID="\$session"
   left+="\$(claudetoggle_statusline)"

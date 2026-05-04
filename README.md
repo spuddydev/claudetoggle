@@ -173,7 +173,18 @@ If you want Claude to draft a new toggle for you, ask it: *"create a toggle that
 
 ## Statusline integration
 
-Add this to the script your statusline already runs (the one referenced by `statusLine.command` in `settings.json`):
+Pipe Claude Code's statusline JSON into `claudetoggle statusline`. It works regardless of what your statusline is written in — bash, fish, node, python, a one-liner in `settings.json`:
+
+```sh
+input=$(cat)
+# ...your existing statusline rendering...
+fragment=$(printf '%s' "$input" | claudetoggle statusline)
+printf '%s%s\n' "$your_status" "$fragment"
+```
+
+The fragment is empty when no toggle is on, so you append unconditionally. `cwd` and `session_id` are read from the JSON; pass `--cwd` or `--session` to override, or set `CLAUDE_CWD` / `CLAUDE_SESSION_ID` in the environment.
+
+If your statusline is already a bash script with `$cwd` and `$session` parsed and a `left+=` accumulator, you can source the helper directly instead:
 
 ```sh
 . "$HOME/.local/share/claudetoggle/bin/statusline.sh"
@@ -181,9 +192,7 @@ export CLAUDE_CWD="$cwd" CLAUDE_SESSION_ID="$session"
 left+="$(claudetoggle_statusline)"
 ```
 
-`$cwd` and `$session` come from your statusline's existing JSON parse. The function emits a leading separator only when output is non-empty, so you append unconditionally and get nothing when no toggles are on.
-
-`setup.sh` prints this snippet for you. It does not mutate your existing statusline script — that's yours.
+`setup.sh` prints both options for you. It does not mutate your existing statusline script — that's yours.
 
 ## Upgrade
 
