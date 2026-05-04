@@ -67,8 +67,8 @@ TOGGLE_REANNOUNCE_EVERY=10
 # Optional. 1 (default) = print ON_MSG at SessionStart when ON. 0 = silent.
 TOGGLE_ANNOUNCE_ON_SESSION_START=1
 
-# Optional. 1 (default) = block the prompt and surface the message when the
-# user flips the toggle. 0 = flip silently with no UI feedback (for toggles
+# Optional. 1 (default) = inject the on/off message into the model's context
+# on flip so the rule lands the same turn. 0 = flip silently (for toggles
 # whose effect is purely behind-the-scenes via TOGGLE_EXTRA_HOOKS).
 TOGGLE_ANNOUNCE_ON_TOGGLE=1
 

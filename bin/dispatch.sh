@@ -53,6 +53,14 @@ api_ok() { [ "${TOGGLE_API:-}" = "1" ]; }
 
 # Pass 1 — UserPromptSubmit only: find a toggle whose slash-command was just
 # invoked, flip it, and announce. Returns 0 (handled) or 1 (no match).
+#
+# Flip announces use inject_context (additionalContext), not block. block
+# would only surface the reason in the UI; the model would never see the
+# rule and would keep behaving as if the toggle were off. inject_context
+# adds the rule to the model's context for this turn while still letting
+# the slash-command body (which usually says "acknowledge the flip") run.
+# Scope errors do still block — the user's prompt cannot be satisfied
+# without a valid scope key, so stopping the turn is the right call.
 handle_user_prompt_match() {
 	local f
 	while IFS= read -r f; do
@@ -84,12 +92,13 @@ handle_user_prompt_match() {
 			toggle_off "$TOGGLE_SCOPE" "$TOGGLE_NAME" "$cwd" "$session"
 			msg=${TOGGLE_OFF_MSG:-"$TOGGLE_NAME OFF"}
 			;;
-		1) # currently OFF → flip ON, optionally seed counter
+		1) # currently OFF → flip ON, reset reannounce counter
 			toggle_on "$TOGGLE_SCOPE" "$TOGGLE_NAME" "$cwd" "$session"
-			if [ "${TOGGLE_REANNOUNCE_EVERY:-0}" -gt 0 ]; then
-				toggle_seed_counter "$TOGGLE_NAME" \
-					$((TOGGLE_REANNOUNCE_EVERY - 1))
-			fi
+			# inject_context below already shows ON_MSG to the model
+			# this turn, so reset the counter to 0 — the next reannounce
+			# fires REANNOUNCE_EVERY prompts later, not immediately.
+			[ "${TOGGLE_REANNOUNCE_EVERY:-0}" -gt 0 ] &&
+				toggle_seed_counter "$TOGGLE_NAME" 0
 			msg=${TOGGLE_ON_MSG:-"$TOGGLE_NAME ON"}
 			;;
 		2) # scope key unavailable; user explicitly invoked the command
@@ -97,8 +106,11 @@ handle_user_prompt_match() {
 			;;
 		esac
 
+		# Drop any pending CLI-flip message — the slash flip supersedes it.
+		toggle_pending_clear "$TOGGLE_NAME"
+
 		if [ "${TOGGLE_ANNOUNCE_ON_TOGGLE:-1}" != "0" ]; then
-			block_userprompt "$msg"
+			inject_context "$msg"
 		fi
 		# Silent toggle: flip done, no announcement, return.
 		return 0
@@ -106,16 +118,33 @@ handle_user_prompt_match() {
 	return 1
 }
 
-# Pass 2 — UserPromptSubmit only: tick reannounce counters for every active
-# toggle whose REANNOUNCE_EVERY > 0, aggregate due ON_MSGs into one buffer,
-# emit a single inject_context if any are due.
+# Pass 2 — UserPromptSubmit only: drain any CLI-flip pending messages for
+# every registered toggle, then tick reannounce counters for every active
+# toggle whose REANNOUNCE_EVERY > 0. Aggregate everything into one buffer
+# and emit a single inject_context.
+#
+# Pending takes priority over reannounce on the same prompt: a CLI flip
+# that just happened is a higher-signal event than a periodic reannounce,
+# and we suppress the reannounce for that toggle this turn so the message
+# is not duplicated.
 handle_reannounce() {
-	local f msgs=() count active_rc
+	local f msgs=() count active_rc pending
 	while IFS= read -r f; do
 		toggle_reset
 		# shellcheck disable=SC1090
 		. "$f"
 		api_ok || continue
+
+		# Drain pending first. Survives whether the toggle is currently
+		# on or off — the CLI wrote the appropriate message at flip time.
+		pending=$(toggle_pending_drain "$TOGGLE_NAME") || pending=
+		if [ -n "$pending" ]; then
+			msgs+=("$pending")
+			# A pending flip implies the counter was reset by the CLI
+			# (or never seeded); skip the reannounce tick this turn.
+			continue
+		fi
+
 		active_rc=0
 		toggle_active "$TOGGLE_SCOPE" "$TOGGLE_NAME" "$cwd" "$session" || active_rc=$?
 		[ "$active_rc" -eq 0 ] || continue

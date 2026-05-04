@@ -159,6 +159,43 @@ _toggle_seed_counter_locked() {
 	printf '%s\n' "$value" >"$counter"
 }
 
+# toggle_pending_path NAME → path to the CLI-flip pending message file.
+# One file per toggle, overwritten on each CLI flip so only the most
+# recent CLI flip surfaces in the next prompt.
+toggle_pending_path() {
+	printf '%s\n' "$CLAUDETOGGLE_HOME/state/$1/pending"
+}
+
+# toggle_pending_write NAME MESSAGE → record MESSAGE so the next
+# UserPromptSubmit dispatch drains and injects it into the model's context.
+# Created with umask 077; parent directory is mkdir-p'd if absent.
+toggle_pending_write() {
+	local path
+	path=$(toggle_pending_path "$1")
+	(
+		umask 077
+		mkdir -p "${path%/*}"
+		printf '%s' "$2" >"$path"
+	)
+}
+
+# toggle_pending_drain NAME → print the pending message (if any) and
+# remove the file. Empty stdout when nothing was pending.
+toggle_pending_drain() {
+	local path
+	path=$(toggle_pending_path "$1")
+	[ -r "$path" ] || return 0
+	cat "$path"
+	rm -f "$path"
+}
+
+# toggle_pending_clear NAME → drop any pending message without printing.
+# Called when a slash-command flip on the same prompt supersedes a CLI
+# flip that happened earlier.
+toggle_pending_clear() {
+	rm -f "$(toggle_pending_path "$1")"
+}
+
 # toggle_statusline_fn NAME → naming convention for an optional custom
 # statusline fragment function. Toggle authors declare a function with
 # this exact name in their registry file; the statusline derives the

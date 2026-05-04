@@ -342,9 +342,14 @@ cmd_on() {
 	[ -n "$name" ] || die "on requires a toggle name."
 	local dir=$CLAUDETOGGLE_HOME/toggles/$name
 	[ -d "$dir" ] || die "$name is not registered."
-	IFS='|' read -r tname scope _on _off < <(read_toggle_meta "$dir/toggle.sh")
+	IFS='|' read -r tname scope on_msg _off < <(read_toggle_meta "$dir/toggle.sh")
 	[ -n "$scope" ] || die "$name: TOGGLE_SCOPE missing."
 	if toggle_on "$scope" "$tname" "$PWD" "${CLAUDE_SESSION_ID:-}"; then
+		# Queue the announce so the next UserPromptSubmit in any live
+		# Claude session injects the rule into the model's context.
+		# Without this, a CLI flip would only surface at the next
+		# session start or after a full reannounce cycle.
+		[ -n "$on_msg" ] && toggle_pending_write "$tname" "$on_msg"
 		printf 'claudetoggle: %s is now ON.\n' "$name"
 	else
 		die "$name requires a $scope context (PWD=$PWD, session=${CLAUDE_SESSION_ID:-})"
@@ -356,9 +361,10 @@ cmd_off() {
 	[ -n "$name" ] || die "off requires a toggle name."
 	local dir=$CLAUDETOGGLE_HOME/toggles/$name
 	[ -d "$dir" ] || die "$name is not registered."
-	IFS='|' read -r tname scope _on _off < <(read_toggle_meta "$dir/toggle.sh")
+	IFS='|' read -r tname scope _on off_msg < <(read_toggle_meta "$dir/toggle.sh")
 	[ -n "$scope" ] || die "$name: TOGGLE_SCOPE missing."
 	if toggle_off "$scope" "$tname" "$PWD" "${CLAUDE_SESSION_ID:-}"; then
+		[ -n "$off_msg" ] && toggle_pending_write "$tname" "$off_msg"
 		printf 'claudetoggle: %s is now off.\n' "$name"
 	else
 		die "$name requires a $scope context (PWD=$PWD, session=${CLAUDE_SESSION_ID:-})"
