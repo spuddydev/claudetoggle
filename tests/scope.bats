@@ -66,3 +66,17 @@ teardown() {
 	run scope_path bogus feat "" ""
 	[ "$status" -eq 1 ]
 }
+
+@test "scope_path tolerates fewer than four positional args" {
+	# Callers occasionally drop the trailing session "" arg. An earlier
+	# implementation did `shift 4` which silently no-oped when $# < 4,
+	# leaving the consumed args in $@ to be reinterpreted as path parts —
+	# the path then included junk like /project/feat/<cwd> appended to
+	# the real sentinel. The arity-tolerant version must produce the same
+	# result whether the caller passes 3 or 4 args.
+	a=$(scope_path project feat /tmp)
+	b=$(scope_path project feat /tmp "")
+	[ "$a" = "$b" ]
+	c=$(scope_path global feat)
+	[ "$c" = "$CLAUDETOGGLE_HOME/state/feat/global" ]
+}

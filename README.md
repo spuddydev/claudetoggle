@@ -103,8 +103,8 @@ When the user types `/<name>`:
 
 1. A single shared dispatcher (set up by `setup.sh`) intercepts the prompt.
 2. It flips a sentinel file under `<data>/state/<name>/`.
-3. It blocks the prompt and tells the model the new state — that's how the rule "lands" without needing the model to read disk.
-4. The next time the model talks, it knows the rule is on (or off).
+3. It injects `ON_MSG` (or `OFF_MSG`) into the model's context for this turn — that's how the rule "lands" without needing the model to read disk.
+4. From this turn on, the model knows the rule is on (or off).
 
 You don't write the dispatcher. You don't edit `settings.json`. You write the metadata file (and optionally peer enforcement scripts) and `claudetoggle add` does the rest.
 
@@ -122,7 +122,7 @@ Every toggle declares these:
 | `TOGGLE_MARKER` | optional | none | Substring in the slash-command markdown body for forward-compatible detection. Recommended. |
 | `TOGGLE_REANNOUNCE_EVERY` | optional | `0` | Reinject `ON_MSG` every N prompts. `0` = announce once on flip, never again. |
 | `TOGGLE_ANNOUNCE_ON_SESSION_START` | optional | `1` | Print `ON_MSG` at session start when the toggle is on. |
-| `TOGGLE_ANNOUNCE_ON_TOGGLE` | optional | `1` | Block the prompt and announce on flip. Set to `0` for silent toggles whose effect is purely behind-the-scenes. |
+| `TOGGLE_ANNOUNCE_ON_TOGGLE` | optional | `1` | Inject the on/off message into the model's context on flip. Set to `0` for silent toggles whose effect is purely behind-the-scenes. |
 | `TOGGLE_STATUSLINE` | optional | `1` | Show this toggle on the statusline when on. |
 | `TOGGLE_EXTRA_HOOKS` | optional | empty | One entry per extra event hook (see below). |
 
@@ -173,7 +173,18 @@ If you want Claude to draft a new toggle for you, ask it: *"create a toggle that
 
 ## Statusline integration
 
-Add this to the script your statusline already runs (the one referenced by `statusLine.command` in `settings.json`):
+Pipe Claude Code's statusline JSON into `claudetoggle statusline`. It works regardless of what your statusline is written in — bash, fish, node, python, a one-liner in `settings.json`:
+
+```sh
+input=$(cat)
+# ...your existing statusline rendering...
+fragment=$(printf '%s' "$input" | claudetoggle statusline)
+printf '%s%s\n' "$your_status" "$fragment"
+```
+
+The fragment is empty when no toggle is on, so you append unconditionally. `cwd` and `session_id` are read from the JSON; pass `--cwd` or `--session` to override, or set `CLAUDE_CWD` / `CLAUDE_SESSION_ID` in the environment.
+
+If your statusline is already a bash script with `$cwd` and `$session` parsed and a `left+=` accumulator, you can source the helper directly instead:
 
 ```sh
 . "$HOME/.local/share/claudetoggle/bin/statusline.sh"
@@ -181,9 +192,7 @@ export CLAUDE_CWD="$cwd" CLAUDE_SESSION_ID="$session"
 left+="$(claudetoggle_statusline)"
 ```
 
-`$cwd` and `$session` come from your statusline's existing JSON parse. The function emits a leading separator only when output is non-empty, so you append unconditionally and get nothing when no toggles are on.
-
-`setup.sh` prints this snippet for you. It does not mutate your existing statusline script — that's yours.
+`setup.sh` prints both options for you. It does not mutate your existing statusline script — that's yours.
 
 ## Upgrade
 

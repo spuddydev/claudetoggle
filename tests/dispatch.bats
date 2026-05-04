@@ -47,38 +47,41 @@ session_input() {
 		'{hook_event_name:"SessionStart",cwd:$c,session_id:$s}'
 }
 
-@test "case 1: /coauth toggles ON, emits block JSON with ON_MSG, sentinel created" {
+@test "case 1: /coauth toggles ON, injects ON_MSG as additionalContext, sentinel created" {
 	write_toggle coauth project
 	run_dispatch UserPromptSubmit "$(prompt_input '/coauth')"
 	[ "$status" -eq 0 ]
-	[ "$(jq -r .decision <<<"$output")" = "block" ]
-	[ "$(jq -r .reason <<<"$output")" = "coauth is ON" ]
+	# Flip path uses additionalContext so the model actually sees the rule.
+	# block_userprompt only surfaces in the UI and never reaches the model.
+	[ "$(jq -r .hookSpecificOutput.hookEventName <<<"$output")" = "UserPromptSubmit" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "coauth is ON" ]
+	[ "$(jq -r '.decision // empty' <<<"$output")" = "" ]
 	key=$(. "$(repo_root)/lib/scope.sh" && project_key "$CWD")
 	[ -f "$CLAUDETOGGLE_HOME/state/coauth/projects/$key" ]
 }
 
-@test "case 2: second /coauth toggles OFF, emits OFF_MSG, sentinel removed" {
+@test "case 2: second /coauth toggles OFF, injects OFF_MSG, sentinel removed" {
 	write_toggle coauth project
 	run_dispatch UserPromptSubmit "$(prompt_input '/coauth')"
 	run_dispatch UserPromptSubmit "$(prompt_input '/coauth')"
 	[ "$status" -eq 0 ]
-	[ "$(jq -r .reason <<<"$output")" = "coauth is OFF" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "coauth is OFF" ]
 	key=$(. "$(repo_root)/lib/scope.sh" && project_key "$CWD")
 	[ ! -f "$CLAUDETOGGLE_HOME/state/coauth/projects/$key" ]
 }
 
 @test "case 3: plain prompt with active toggle ticks, reannounces after threshold" {
 	write_toggle foo session "TOGGLE_REANNOUNCE_EVERY=2"
-	# Flip on (seeds counter to 1; next plain prompt → tick=2 → due).
+	# Flip on (already injects ON_MSG; counter resets to 0).
 	run_dispatch UserPromptSubmit "$(prompt_input '/foo')"
-	# First plain prompt: counter ticks 1→2 → due.
+	# First plain prompt: counter ticks 0→1 → not due yet → silent.
 	run_dispatch UserPromptSubmit "$(prompt_input 'plain')"
+	[ -z "$output" ]
+	# Second plain prompt: counter ticks 1→2 → due.
+	run_dispatch UserPromptSubmit "$(prompt_input 'plain again')"
 	[ "$status" -eq 0 ]
 	got=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$output")
 	[[ "$got" == *"foo is ON"* ]]
-	# Second plain prompt: counter resets to 0, then 1 → not due yet → silent.
-	run_dispatch UserPromptSubmit "$(prompt_input 'plain again')"
-	[ -z "$output" ]
 }
 
 @test "case 4: plain prompt with no active toggles emits nothing" {
@@ -93,14 +96,14 @@ session_input() {
 	prompt='<command-message>/devlog</command-message>
 <command-name>/devlog</command-name>'
 	run_dispatch UserPromptSubmit "$(prompt_input "$prompt")"
-	[ "$(jq -r .reason <<<"$output")" = "devlog is ON" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "devlog is ON" ]
 }
 
 @test "case 6: TOGGLE_MARKER substring detected" {
 	write_toggle foo session
 	prompt='unrelated text <!-- foo-marker --> more'
 	run_dispatch UserPromptSubmit "$(prompt_input "$prompt")"
-	[ "$(jq -r .reason <<<"$output")" = "foo is ON" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "foo is ON" ]
 }
 
 @test "case 7: project toggle invoked with no cwd → scope-error block" {
@@ -109,6 +112,9 @@ session_input() {
 		'{hook_event_name:"UserPromptSubmit",prompt:$p,cwd:"",session_id:$s}')
 	run_dispatch UserPromptSubmit "$input"
 	[ "$status" -eq 0 ]
+	# Scope errors keep using block: the prompt cannot be satisfied without
+	# a valid scope key, so stopping the turn is the right behaviour.
+	[ "$(jq -r .decision <<<"$output")" = "block" ]
 	got=$(jq -r .reason <<<"$output")
 	[[ "$got" == *"requires a project context"* ]]
 }
@@ -149,7 +155,7 @@ session_input() {
 	# REANNOUNCE_EVERY=1 so any tick at all on the flip would inject.
 	write_toggle foo session "TOGGLE_REANNOUNCE_EVERY=1"
 	run_dispatch UserPromptSubmit "$(prompt_input '/foo')"
-	[ "$(jq -r .decision <<<"$output")" = "block" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "foo is ON" ]
 	# Counter was seeded to 0 (REANNOUNCE_EVERY-1) and never ticked this turn.
 	read -r count <"$CLAUDETOGGLE_HOME/state/foo/counter"
 	[ "$count" = "0" ]
@@ -160,7 +166,7 @@ session_input() {
 	write_toggle aaa session
 	write_toggle bbb session
 	run_dispatch UserPromptSubmit "$(prompt_input '/aaa /bbb')"
-	[ "$(jq -r .reason <<<"$output")" = "aaa is ON" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "aaa is ON" ]
 }
 
 @test "case 14: TOGGLE_API=2 rejected; other toggles continue" {
@@ -174,7 +180,7 @@ TOGGLE_OFF_MSG="old is OFF"
 EOF
 	write_toggle good session
 	run_dispatch UserPromptSubmit "$(prompt_input '/good')"
-	[ "$(jq -r .reason <<<"$output")" = "good is ON" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "good is ON" ]
 }
 
 @test "case 15: TOGGLE_API unset rejected; other toggles continue" {
@@ -187,7 +193,7 @@ TOGGLE_OFF_MSG="legacy is OFF"
 EOF
 	write_toggle good session
 	run_dispatch UserPromptSubmit "$(prompt_input '/good')"
-	[ "$(jq -r .reason <<<"$output")" = "good is ON" ]
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "good is ON" ]
 }
 
 @test "case 16: empty registry → exit 0, no output for both events" {
@@ -209,4 +215,30 @@ EOF
 	run_dispatch UserPromptSubmit "$(prompt_input 'hello world')"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
+}
+
+@test "case 18: pending CLI-flip message drains on the next plain prompt" {
+	write_toggle foo session
+	# Simulate a CLI flip having stashed a pending message.
+	mkdir -p "$CLAUDETOGGLE_HOME/state/foo"
+	printf 'foo is ON' >"$CLAUDETOGGLE_HOME/state/foo/pending"
+	# Mark the toggle ON so it would be considered active anyway.
+	mkdir -p "$CLAUDETOGGLE_HOME/state/foo/sessions"
+	: >"$CLAUDETOGGLE_HOME/state/foo/sessions/$SID"
+	run_dispatch UserPromptSubmit "$(prompt_input 'plain')"
+	[ "$status" -eq 0 ]
+	got=$(jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$output")
+	[[ "$got" == *"foo is ON"* ]]
+	# Pending file is removed after draining so the next prompt is silent.
+	[ ! -e "$CLAUDETOGGLE_HOME/state/foo/pending" ]
+}
+
+@test "case 19: slash-command flip clears any pending CLI-flip message" {
+	write_toggle foo session
+	mkdir -p "$CLAUDETOGGLE_HOME/state/foo"
+	printf 'foo is OFF' >"$CLAUDETOGGLE_HOME/state/foo/pending"
+	# /foo flips ON, supersedes the OFF pending. The flip's ON_MSG wins.
+	run_dispatch UserPromptSubmit "$(prompt_input '/foo')"
+	[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" = "foo is ON" ]
+	[ ! -e "$CLAUDETOGGLE_HOME/state/foo/pending" ]
 }

@@ -6,6 +6,24 @@ All notable changes are recorded here. Format follows [Keep a Changelog](https:/
 
 (Reserved.)
 
+## [0.3.0] — 2026-05-04
+
+### Fixed
+
+- A flipped toggle now actually changes how the model behaves. The dispatcher previously only surfaced the on or off message in the user interface, so the toggle state changed but the rule never reached the model. The rule is now added to the model's context the same turn the user flips it.
+- Peer hooks now read the right toggle state. A path helper produced the wrong sentinel location when called with three arguments instead of four, so peer guards like the coauth commit check always saw the toggle as off. Made the helper tolerant of fewer arguments and tightened the example.
+- The shipped coauth commit guard no longer misses multi line and heredoc commit messages, so the trailer cannot be sneaked through a flipped off toggle.
+
+### Added
+
+- New `claudetoggle statusline` entry point reads the JSON Claude Code already sends, falls back to flags or environment, and prints the fragment. Drop in for any statusline regardless of the host language. The bash sourceable form still works.
+- Flips made from the command line now surface on the next prompt of any live session, not only at the next session start.
+- Project guide at `CLAUDE.md` covers layout, invariants worth knowing, the local development loop, and the easy to misread non-bugs.
+
+### Changed
+
+- The slash command flip path now always injects context, never blocks the prompt. The only path that still blocks is the scope error case where the prompt cannot be satisfied without a valid scope key.
+
 ## [0.2.1] — 2026-04-26
 
 ### Fixed
