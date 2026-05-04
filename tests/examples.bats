@@ -43,3 +43,54 @@ examples_dir() {
 	[ "$TOGGLE_ANNOUNCE_ON_TOGGLE" = "0" ]
 	grep -q "$TOGGLE_MARKER" "$(examples_dir)/devlog/devlog.md"
 }
+
+# Drive examples/coauth/commit-check.sh against fabricated PreToolUse JSON
+# under both ON and OFF sentinel states. Catches the regression where
+# scope_path's arity bug made the script always take the OFF branch.
+coauth_check() {
+	local cwd=$1 cmd=$2
+	jq -nc --arg cwd "$cwd" --arg c "$cmd" \
+		'{cwd:$cwd, tool_input:{command:$c}}' |
+		bash "$(examples_dir)/coauth/commit-check.sh"
+}
+
+@test "examples/coauth/commit-check: OFF + no trailer → allow" {
+	cwd=$BATS_TEST_TMPDIR/proj
+	mkdir -p "$cwd"
+	# Sentinel absent → OFF state.
+	out=$(coauth_check "$cwd" 'git commit -m "feat: x"')
+	[ -z "$out" ]
+}
+
+@test "examples/coauth/commit-check: OFF + trailer → deny" {
+	cwd=$BATS_TEST_TMPDIR/proj
+	mkdir -p "$cwd"
+	cmd=$'git commit -m "feat: x\n\nCo-Authored-By: Claude <x@y>"'
+	out=$(coauth_check "$cwd" "$cmd")
+	got=$(jq -r .hookSpecificOutput.permissionDecisionReason <<<"$out")
+	[[ "$got" == *"OFF but the commit message includes a Co-Authored-By trailer"* ]]
+}
+
+@test "examples/coauth/commit-check: ON + no trailer → deny" {
+	cwd=$BATS_TEST_TMPDIR/proj
+	mkdir -p "$cwd"
+	. "$(repo_root)/lib/scope.sh"
+	sentinel=$(scope_path project coauth "$cwd" "")
+	mkdir -p "$(dirname "$sentinel")"
+	: >"$sentinel"
+	out=$(coauth_check "$cwd" 'git commit -m "feat: x"')
+	got=$(jq -r .hookSpecificOutput.permissionDecisionReason <<<"$out")
+	[[ "$got" == *"ON but the commit message lacks a Co-Authored-By"* ]]
+}
+
+@test "examples/coauth/commit-check: ON + trailer → allow" {
+	cwd=$BATS_TEST_TMPDIR/proj
+	mkdir -p "$cwd"
+	. "$(repo_root)/lib/scope.sh"
+	sentinel=$(scope_path project coauth "$cwd" "")
+	mkdir -p "$(dirname "$sentinel")"
+	: >"$sentinel"
+	cmd=$'git commit -m "feat: x\n\nCo-Authored-By: Claude <x@y>"'
+	out=$(coauth_check "$cwd" "$cmd")
+	[ -z "$out" ]
+}

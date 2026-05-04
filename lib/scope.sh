@@ -32,9 +32,15 @@ project_key() {
 # scope_path SCOPE FEATURE CWD SESSION [...PARTS]
 # Empty/missing required key prints nothing and returns 1, so callers can
 # silently skip a toggle when its scope key isn't available.
+#
+# Tolerant of callers who pass fewer than 4 positional args (e.g.
+# `scope_path project coauth "$cwd"` with no session). bash `shift 4`
+# would silently no-op when $# < 4, leaving the consumed args in $@ to
+# be reinterpreted as path parts further down. We shift exactly the
+# number actually present to keep the parts loop honest.
 scope_path() {
-	local scope=$1 feature=$2 cwd=$3 session=$4
-	shift 4
+	local scope=$1 feature=$2 cwd=${3:-} session=${4:-}
+	if [ "$#" -ge 4 ]; then shift 4; else shift "$#"; fi
 	local base=$CLAUDETOGGLE_HOME/state/$feature path
 	case $scope in
 	global) path=$base/global ;;
